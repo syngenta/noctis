@@ -1,0 +1,70 @@
+[build-system]
+requires = [
+    "setuptools>=42",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "noctis"
+version = "0.0.0"
+authors = [
+        { name = "Marco Stenta", email = "marco.stenta@syngenta.com" },
+        { name = "Nataliya Lopanitsyna", email = "nataliya.lopanitsyna@syngenta.com" },
+]
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+classifiers = [
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: MacOS :: MacOS X",
+        "Operating System :: Microsoft :: Windows",
+        "Operating System :: OS Independent",
+        "Operating System :: POSIX :: Linux",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: Implementation :: CPython",
+        "Topic :: Scientific/Engineering :: Chemistry",
+]
+dynamic = [
+    "dependencies",
+    "description",
+    "optional-dependencies",
+    "readme",
+
+]
+
+[project.urls]
+homepage = "https://github.com/syngenta/noctis"
+repository = "https://github.com/syngenta/noctis"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = "requirements.txt"}
+description = {file = "description.txt"}
+readme = {file = "README.rst", content-type = "text/x-rst"}
+
+
+
+[tool.setuptools.dynamic.optional-dependencies]
+dev = {file = "requirements-dev.txt"}
+
+[tool.bumpver]
+current_version = "0.0.0"
+version_pattern = "MAJOR.MINOR.PATCH"
+commit_message  = "Bump version {old_version} -> {new_version}"
+commit          = true
+tag             = true
+push            = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = ['current_version = "{version}"', 'version = "{version}"']
+
+
+
