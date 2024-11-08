@@ -1,0 +1,11 @@
+# Requirement strings following PEP 508 (https://peps.python.org/pep-0508/)
+bumpver
+pytest
+pytest-cov
+pytest-mock
+sphinx
+black
+flake8
+isort
+pre-commit
+graphviz
