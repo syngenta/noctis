@@ -5,7 +5,7 @@ neo4j~=5.12.0
 networkx~=3.1
 pandas~=2.2.0
 pydantic~=2.6.4
-#linchemin @ git+https://github.com/syngenta/linchemin-private.git@dev
+linchemin @ git+https://github.com/syngenta/linchemin-private.git@dev
 dask
 dask[dataframe]
 dask[distributed]
