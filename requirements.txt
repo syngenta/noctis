@@ -1,18 +1,14 @@
 # Requirement strings following PEP 508 (https://peps.python.org/pep-0508/)
-dynaconf~=3.2.4
-pyyaml~=6.0.1
-neo4j~=5.12.0
-networkx~=3.1
-pandas~=2.2.0
-pydantic~=2.6.4
-linchemin @ git+https://github.com/syngenta/linchemin-private.git@dev
+dynaconf
+pyyaml
+neo4j>=5.0.0
+networkx
+pandas>=2.0.0
+pydantic>=2.0.0
+tqdm
 dask
 dask[dataframe]
 dask[distributed]
 
-
-noctis~=0.0.0
-tqdm~=4.66.2
-rdkit~=2023.9.5
-pytest~=7.4.2
-setuptools~=68.0.0
+rdkit
+linchemin @ git+https://github.com/syngenta/linchemin-private.git@dev
