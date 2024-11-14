@@ -7,6 +7,8 @@ from noctis.data_transformation.preprocessing.utils import (
     _update_partition_dict_with_row,
     _build_dataframes_from_dict,
     _save_dataframes_to_partition_csv,
+    explode_smiles_like_reaction_string,
+    explode_v3000_reaction_string,
 )
 
 
@@ -67,6 +69,18 @@ class TestDataProcessingFunctions(unittest.TestCase):
             ]
             actual_calls = [call[0][0] for call in mock_to_csv.call_args_list]
             self.assertEqual(sorted(actual_calls), sorted(expected_calls))
+
+
+def test_explode_reaction_smiles():
+    reactions_smiles = "CNOC(O)=O.Cl>>CNCl"
+    reactants, products = explode_smiles_like_reaction_string(reactions_smiles)
+    assert sorted(reactants) == sorted(["CNOC(O)=O", "Cl"])
+    assert sorted(products) == sorted(["CNCl"])
+
+    general_string = "reactant1.reactant2>reagent1>product1.product2"
+    reactants, products = explode_smiles_like_reaction_string(general_string)
+    assert sorted(reactants) == sorted(["reactant1", "reactant2"])
+    assert sorted(products) == sorted(["product1", "product2"])
 
 
 if __name__ == "__main__":

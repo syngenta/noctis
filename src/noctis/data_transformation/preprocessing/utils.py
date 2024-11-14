@@ -43,3 +43,50 @@ def save_list_to_partition_csv(my_list, output_dir, name, partition_num):
         writer = csv.writer(file)
         for item in my_list:
             writer.writerow(item)
+
+
+def explode_smiles_like_reaction_string(
+    reaction_string: str,
+) -> tuple[list[str], list[str]]:
+    reactants, _, products = reaction_string.split(">")
+    reactants = reactants.split(".")
+    products = products.split(".")
+    return reactants, products
+
+
+def explode_v3000_reaction_string(reaction_string: str) -> tuple[list[str], list[str]]:
+    raise NotImplementedError
+    lines = reaction_string.split("\n")
+
+    reactants = []
+    products = []
+    current_section = None
+    current_molecule = []
+
+    def add_molecule(section, molecule):
+        if section == "reactant":
+            reactants.append("\n".join(molecule))
+        elif section == "product":
+            products.append("\n".join(molecule))
+
+    section_starts = {
+        "M  V30 BEGIN REACTANT": "reactant",
+        "M  V30 BEGIN PRODUCT": "product",
+        "M  V30 BEGIN AGENT": "agent",
+    }
+
+    for line in lines:
+        line = line.strip()
+
+        if line in section_starts:
+            current_section = section_starts[line]
+        elif line == "M  V30 BEGIN CTAB":
+            current_molecule = [line]
+        elif line == "M  V30 END CTAB":
+            current_molecule.append(line)
+            add_molecule(current_section, current_molecule)
+            current_molecule = []
+        elif current_molecule:
+            current_molecule.append(line)
+
+    return reactants, products
