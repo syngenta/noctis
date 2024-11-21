@@ -14,6 +14,8 @@ from noctis.data_transformation.preprocessing.utils import (
 )
 
 from noctis.data_transformation.preprocessing.graph_expander import GraphExpander
+from noctis.data_architecture.graph_schema import GraphSchema
+
 
 @dataclass
 class FilePreprocessorConfig:
@@ -30,7 +32,7 @@ class FilePreprocessorConfig:
 
 
 class Preprocessor:
-    def __init__(self, schema: dict):
+    def __init__(self, schema: GraphSchema):
         self.schema = schema
 
     def preprocess_csv_for_neo4j(self, config: FilePreprocessorConfig) -> None:
@@ -43,7 +45,7 @@ class Preprocessor:
 
 
 class FilePreprocessor:
-    def __init__(self, schema: dict, config: FilePreprocessorConfig):
+    def __init__(self, schema: GraphSchema, config: FilePreprocessorConfig):
         self.schema = schema
         self.config = config
 
@@ -100,10 +102,14 @@ class FilePreprocessor:
         return
 
     def _process_row(self, row: pd.Series) -> tuple[dict, dict]:
-
         splitted_row = self._split_row_by_node_types(row)
         ge = GraphExpander(self.schema)
-        nodes, relationships = ge.expand_from_csv(splitted_row, self.config.inp_chem_format, self.config.out_chem_format, self.config.validation)
+        nodes, relationships = ge.expand_from_csv(
+            splitted_row,
+            self.config.inp_chem_format,
+            self.config.out_chem_format,
+            self.config.validation,
+        )
 
         return nodes, relationships
 
@@ -111,7 +117,7 @@ class FilePreprocessor:
         node_data = {}
 
         for column, value in row.items():
-            parts = column.split('.', 1)
+            parts = column.split(".", 1)
 
             if len(parts) == 2:
                 label, property_name = parts
@@ -120,4 +126,3 @@ class FilePreprocessor:
                 node_data[label][property_name] = value
 
         return node_data
-
