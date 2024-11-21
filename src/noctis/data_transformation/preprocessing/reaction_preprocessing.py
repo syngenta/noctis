@@ -227,3 +227,9 @@ class ReactionPreProcessor:
             start_node=start_node,
             end_node=end_node,
         )
+
+    def build_from_string_w_validation(self):
+        pass
+
+    def build_from_string(self):
+        pass

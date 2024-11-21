@@ -1,6 +1,7 @@
+import json
 from typing import Iterator
 from dataclasses import dataclass
-from dask.distributed import Client
+from dask.distributed import Client, wait
 import pandas as pd
 import dask.dataframe as dd
 import os
@@ -12,12 +13,15 @@ from noctis.data_transformation.preprocessing.utils import (
     _build_dataframes_from_dict,
 )
 
+from noctis.data_transformation.preprocessing.graph_expander import GraphExpander
 
 @dataclass
 class FilePreprocessorConfig:
     input_file: str
     output_folder: str
     tmp_folder: str
+    inp_chem_format: str
+    out_chem_format: str
     validation: bool
     parallel: bool
     prefix: str
@@ -30,7 +34,7 @@ class Preprocessor:
         self.schema = schema
 
     def preprocess_csv_for_neo4j(self, config: FilePreprocessorConfig) -> None:
-        csv_preprocessor = CSVPreprocessor(self.schema, config)
+        csv_preprocessor = FilePreprocessor(self.schema, config)
         csv_preprocessor.run()
 
     def preprocess_object_for_neo4j(self, config: FilePreprocessorConfig) -> None:
@@ -38,7 +42,7 @@ class Preprocessor:
         pass
 
 
-class CSVPreprocessor:
+class FilePreprocessor:
     def __init__(self, schema: dict, config: FilePreprocessorConfig):
         self.schema = schema
         self.config = config
@@ -96,9 +100,24 @@ class CSVPreprocessor:
         return
 
     def _process_row(self, row: pd.Series) -> tuple[dict, dict]:
-        print("row:", row)
-        processed_row = (
-            {"node_label": [{"h1": row["header1"]}]},
-            {"relationship_type": [{"h1": row["header2"]}]},
-        )
-        return processed_row
+
+        splitted_row = self._split_row_by_node_types(row)
+        ge = GraphExpander(self.schema)
+        nodes, relationships = ge.expand_from_csv(splitted_row, self.config.inp_chem_format, self.config.out_chem_format, self.config.validation)
+
+        return nodes, relationships
+
+    def _split_row_by_node_types(self, row: pd.Series) -> dict[str, dict[str, str]]:
+        node_data = {}
+
+        for column, value in row.items():
+            parts = column.split('.', 1)
+
+            if len(parts) == 2:
+                label, property_name = parts
+                if label not in node_data:
+                    node_data[label] = {}
+                node_data[label][property_name] = value
+
+        return node_data
+
