@@ -3,13 +3,19 @@ import pandas as pd
 import os
 import tempfile
 from unittest.mock import patch
+
+import pytest
+from noctis import settings
 from noctis.data_transformation.preprocessing.utils import (
     _update_partition_dict_with_row,
     _build_dataframes_from_dict,
     _save_dataframes_to_partition_csv,
     explode_smiles_like_reaction_string,
-    explode_v3000_reaction_string,
+    create_noctis_node,
+    create_noctis_relationship,
 )
+from pydantic import ValidationError
+from noctis.data_architecture.datamodel import Node, Relationship
 
 
 class TestDataProcessingFunctions(unittest.TestCase):
@@ -81,6 +87,35 @@ def test_explode_reaction_smiles():
     reactants, products = explode_smiles_like_reaction_string(general_string)
     assert sorted(reactants) == sorted(["reactant1", "reactant2"])
     assert sorted(products) == sorted(["product1", "product2"])
+
+
+def test_create_noctis_node():
+    node1 = create_noctis_node(node_uid="AB123", node_label="MyNode", properties={})
+    assert isinstance(node1, Node)
+
+    with pytest.raises(ValidationError):
+        Node(uid=122, node_label="Node1", properties={})
+
+
+def test_create_noctis_relationship():
+    # Test valid relationship creation
+    mol_node = Node(node_label="StartNode", uid="AB123")
+    ce_node = Node(node_label="EndNode", uid="CD456")
+
+    relationship = create_noctis_relationship(
+        mol_node=mol_node, ce_node=ce_node, role="reactants"
+    )
+    assert isinstance(relationship, Relationship)
+    assert relationship.start_node == mol_node
+    assert (
+        relationship.relationship_type == settings.relationships.relationship_reactant
+    )
+    relationship = create_noctis_relationship(
+        mol_node=mol_node, ce_node=ce_node, role="products"
+    )
+    assert isinstance(relationship, Relationship)
+    assert relationship.start_node == ce_node
+    assert relationship.relationship_type == settings.relationships.relationship_product
 
 
 if __name__ == "__main__":

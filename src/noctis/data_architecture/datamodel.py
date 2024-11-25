@@ -1,6 +1,6 @@
 from pydantic import BaseModel, field_validator, Field, ConfigDict, model_validator
 
-from typing_extensions import Annotated
+from typing import Annotated
 from pydantic import StringConstraints
 
 from typing import List, Optional
@@ -50,7 +50,7 @@ class Relationship(BaseModel):
     ]
     start_node: Annotated[Node, Field(alias="startnode")]
     end_node: Annotated[Node, Field(alias="endnode")]
-    properties: Annotated[Optional[dict], Field(default={}, alias="properties")]
+    properties: Annotated[Optional[dict], Field(default={})]
 
     @property
     def start_end_uids(self) -> tuple[str, str]:
@@ -157,10 +157,10 @@ class DataContainer(BaseModel):
     def get_record(self, record_key: int) -> GraphRecord:
         return self.records[record_key]
 
-    def get_records(self, record_keys: List[int]) -> List[GraphRecord]:
+    def get_records(self, record_keys: list[int]) -> list[GraphRecord]:
         return [self.records[key] for key in record_keys]
 
-    def get_subcontainer_with_records(self, record_keys: List[int]) -> "DataContainer":
+    def get_subcontainer_with_records(self, record_keys: list[int]) -> "DataContainer":
         subcontainer = DataContainer()
         missing_keys: set[int] = set()
 

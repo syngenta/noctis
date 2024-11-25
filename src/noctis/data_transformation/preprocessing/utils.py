@@ -2,6 +2,12 @@ import pandas as pd
 import os
 import csv
 import json
+from typing import Union
+
+from rdkit.Chem.QED import properties
+
+from noctis import settings
+from noctis.data_architecture.datamodel import Node, Relationship
 
 
 def _update_partition_dict_with_row(
@@ -45,6 +51,33 @@ def save_list_to_partition_csv(my_list, output_dir, name, partition_num):
             writer.writerow(item)
 
 
+def create_noctis_relationship(
+    mol_node: Node, ce_node: Node, role: str
+) -> dict[str : Union[str, dict]]:
+    """To create a noctis relationship based on its type"""
+    if role == "reactants":
+        relationship_type = settings.relationships.relationship_reactant
+        start_node, end_node = mol_node, ce_node
+    else:  # product
+        relationship_type = settings.relationships.relationship_product
+        start_node, end_node = ce_node, mol_node
+    return Relationship(
+        relationship_type=relationship_type,
+        start_node=start_node,
+        end_node=end_node,
+        properties={},
+    )
+
+
+def create_noctis_node(node_uid: str, node_label: str, properties: dict) -> Node:
+    """To create a noctis node"""
+    return Node(
+        uid=node_uid,
+        node_label=node_label,
+        properties=properties,
+    )
+
+
 def explode_smiles_like_reaction_string(
     reaction_string: str,
 ) -> tuple[list[str], list[str]]:
@@ -56,37 +89,3 @@ def explode_smiles_like_reaction_string(
 
 def explode_v3000_reaction_string(reaction_string: str) -> tuple[list[str], list[str]]:
     raise NotImplementedError
-    lines = reaction_string.split("\n")
-
-    reactants = []
-    products = []
-    current_section = None
-    current_molecule = []
-
-    def add_molecule(section, molecule):
-        if section == "reactant":
-            reactants.append("\n".join(molecule))
-        elif section == "product":
-            products.append("\n".join(molecule))
-
-    section_starts = {
-        "M  V30 BEGIN REACTANT": "reactant",
-        "M  V30 BEGIN PRODUCT": "product",
-        "M  V30 BEGIN AGENT": "agent",
-    }
-
-    for line in lines:
-        line = line.strip()
-
-        if line in section_starts:
-            current_section = section_starts[line]
-        elif line == "M  V30 BEGIN CTAB":
-            current_molecule = [line]
-        elif line == "M  V30 END CTAB":
-            current_molecule.append(line)
-            add_molecule(current_section, current_molecule)
-            current_molecule = []
-        elif current_molecule:
-            current_molecule.append(line)
-
-    return reactants, products

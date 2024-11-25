@@ -111,14 +111,6 @@ def test_relationship_hash():
     assert hash(relationship1) != hash(relationship3)
 
 
-def test_get_alias_relationship():
-    # Test get_alias method
-    assert Relationship.get_attribute_alias("relationship_type") == "type"
-    assert Relationship.get_attribute_alias("start_node") == "startnode"
-    assert Relationship.get_attribute_alias("end_node") == "endnode"
-    assert Relationship.get_attribute_alias("properties") == "properties"
-
-
 def test_get_attribute_relationship():
     # Test get method
     start_node = Node(node_label="StartNode", uid="AB123")

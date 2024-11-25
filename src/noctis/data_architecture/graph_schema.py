@@ -10,14 +10,14 @@ class GraphSchemaValidationError(ValueError):
 class GraphSchema(BaseModel):
     """Base model representing the schema of a NOCtis graph"""
 
-    base_nodes: Dict[str, str] = Field(
+    base_nodes: dict[str, str] = Field(
         default={
             "chemical_equation": settings.nodes.node_chemequation,
             "molecule": settings.nodes.node_molecule,
         },
         min_length=2,
     )
-    base_relationships: Dict[str, Dict[str, str]] = Field(
+    base_relationships: dict[str, dict[str, str]] = Field(
         default={
             "product": {
                 "type": settings.relationships.relationship_product,
@@ -32,8 +32,8 @@ class GraphSchema(BaseModel):
         },
         min_length=2,
     )
-    extra_nodes: Dict[str, str] = Field(default_factory=dict)
-    extra_relationships: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+    extra_nodes: dict[str, str] = Field(default_factory=dict)
+    extra_relationships: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     @field_validator("base_nodes")
     @classmethod

@@ -2,6 +2,11 @@ from noctis.data_architecture.graph_schema import GraphSchema
 from noctis.data_transformation.preprocessing.reaction_preprocessing import (
     ReactionPreProcessor,
 )
+from noctis.data_transformation.preprocessing.core_graph_builder import (
+    build_core_graph,
+    ValidatedStringBuilder,
+    UnvalidatedStringBuilder,
+)
 from noctis.data_architecture.datamodel import Node, Relationship
 from noctis.data_architecture.graph_schema import GraphSchema
 
@@ -17,6 +22,14 @@ class GraphExpander:
     ) -> tuple[dict[str:dict], dict[str:dict]]:
         # expand core schema
         if validation:
+            # processor = ValidatedStringBuilder(
+            #     input_format=input_format, output_format=output_format
+            # )
+            #
+            # base_nodes, base_relationships = build_core_graph(
+            #     reaction_data=step_dict[self.schema.base_nodes["chemical_equation"]],
+            #     builder=processor,
+            # )
             # dict[str:[Node]], dict[str:[Relationships]]
             (
                 base_nodes,
@@ -27,6 +40,14 @@ class GraphExpander:
                 output_format,
             )
         else:
+            # processor = UnvalidatedStringBuilder(
+            #     input_format=input_format
+            # )
+            #
+            # base_nodes, base_relationships = build_core_graph(
+            #     reaction_data=step_dict[self.schema.base_nodes["chemical_equation"]],
+            #     builder=processor,
+            # )
             base_nodes, base_relationships = ReactionPreProcessor.build_from_string(
                 step_dict[self.schema.base_nodes["chemical_equation"]],
                 input_format,

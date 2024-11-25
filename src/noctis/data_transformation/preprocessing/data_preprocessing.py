@@ -1,5 +1,5 @@
 import json
-from typing import Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from dask.distributed import Client, wait
 import pandas as pd
