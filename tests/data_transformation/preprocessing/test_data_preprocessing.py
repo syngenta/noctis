@@ -8,6 +8,7 @@ from noctis.data_transformation.preprocessing.data_preprocessing import (
     FilePreprocessorConfig,
     FilePreprocessor,
 )
+from noctis.data_architecture.graph_schema import GraphSchema
 
 # from noctis.data_transformation.preprocessing.graph_expander import GraphExpander, ReactionPreProcessor
 
@@ -51,7 +52,9 @@ class TestPreprocessor(unittest.TestCase):
 
 class TestFilePreprocessor(unittest.TestCase):
     def setUp(self):
-        self.schema = {"nodes": {"tag": "label"}, "relationships": {"tag": "type"}}
+        self.schema = Mock(spec=GraphSchema)
+        self.schema.base_nodes = {"tag": "label"}
+        self.schema.base_relationships = {"tag": "type"}
         self.config = FilePreprocessorConfig(
             input_file="test.csv",
             output_folder="/output",
@@ -146,19 +149,29 @@ class TestFilePreprocessor(unittest.TestCase):
         "noctis.data_transformation.preprocessing.data_preprocessing._update_partition_dict_with_row"
     )
     @patch(
-        "noctis.data_transformation.preprocessing.data_preprocessing._build_dataframes_from_dict"
+        "noctis.data_transformation.preprocessing.data_preprocessing.Neo4jImportStyle.export_nodes"
+    )
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing.Neo4jImportStyle.export_relationships"
     )
     @patch(
         "noctis.data_transformation.preprocessing.data_preprocessing._save_dataframes_to_partition_csv"
     )
-    def test_process_partition(self, mock_save, mock_build, mock_update):
+    def test_process_partition(
+        self, mock_save, mock_styler_relationships, mock_styler_nodes, mock_update
+    ):
         mock_partition_data = pd.DataFrame(
             {"header1": ["value1"], "header2": ["value2"]}
         )
-        mock_build.side_effect = [
+        mock_styler_relationships.side_effect = [
             Mock(),
             Mock(),
-        ]  # One for nodes, one for relationships
+        ]
+        mock_styler_nodes.side_effect = [
+            Mock(),
+            Mock(),
+        ]
+        # One for nodes, one for relationships
 
         # Mock the _process_row method
         mock_nodes = {"node1": {"attr1": "value1"}}
@@ -179,7 +192,10 @@ class TestFilePreprocessor(unittest.TestCase):
             mock_update.call_count, 2
         )  # Called for both nodes and relationships
         self.assertEqual(
-            mock_build.call_count, 2
+            mock_styler_relationships.call_count, 1
+        )  # Called for both nodes and relationships
+        self.assertEqual(
+            mock_styler_nodes.call_count, 1
         )  # Called for both nodes and relationships
         mock_save.assert_called_once()
 
@@ -221,6 +237,9 @@ class TestFilePreprocessor(unittest.TestCase):
     def test_split_row_by_node_types(self):
         # Create a sample pandas Series
         data = {
+            "Person.uid": "NNN",
+            "Address.uid": "SSS",
+            "Job.uid": "BBB",
             "Person.name": "John Doe",
             "Person.age": "30",
             "Address.street": "Main St",
@@ -232,9 +251,12 @@ class TestFilePreprocessor(unittest.TestCase):
 
         # Expected output
         expected_output = {
-            "Person": {"name": "John Doe", "age": "30"},
-            "Address": {"street": "Main St", "city": "New York"},
-            "Job": {"title": "Engineer"},
+            "Person": {"uid": "NNN", "properties": {"name": "John Doe", "age": "30"}},
+            "Address": {
+                "uid": "SSS",
+                "properties": {"street": "Main St", "city": "New York"},
+            },
+            "Job": {"uid": "BBB", "properties": {"title": "Engineer"}},
         }
 
         # Call the function
@@ -255,3 +277,84 @@ class TestFilePreprocessor(unittest.TestCase):
         row = pd.Series(data)
         result = self.preprocessor._split_row_by_node_types(row)
         self.assertEqual(result, {})
+
+
+class TestEndToEnd(unittest.TestCase):
+    def setUp(self):
+        self.schema = GraphSchema.build_from_dict(
+            {
+                "base_nodes": {
+                    "chemical_equation": "ChemicalEquation",
+                    "molecule": "Molecule",
+                },
+                "base_relationships": {
+                    "product": {
+                        "type": "PRODUCT",
+                        "start_node": "chemical_equation",
+                        "end_node": "molecule",
+                    },
+                    "reactant": {
+                        "type": "REACTANT",
+                        "start_node": "molecule",
+                        "end_node": "chemical_equation",
+                    },
+                },
+                "extra_nodes": {"extra_node_1": "Extra1", "extra_node_2": "Extra2"},
+                "extra_relationships": {
+                    "extra_relationship_1": {
+                        "type": "EXTRAREL1",
+                        "start_node": "extra_node_1",
+                        "end_node": "extra_node_2",
+                    },
+                    "extra_relationship_2": {
+                        "type": "EXTRAREL2",
+                        "start_node": "extra_node_2",
+                        "end_node": "chemical_equation",
+                    },
+                },
+            }
+        )
+        self.config = FilePreprocessorConfig(
+            input_file="test.csv",
+            output_folder="output",
+            tmp_folder="tmp",
+            validation=False,
+            parallel=False,
+            prefix="test_",
+            blocksize=64,
+            chunksize=1000,
+            inp_chem_format="smiles",
+            out_chem_format="smiles",
+        )
+        self.preprocessor = FilePreprocessor(self.schema, self.config)
+
+    def test_end_to_end_process_partition(self):
+        # Create sample input dataframe
+        data_dict = {
+            "ChemicalEquation.smiles": ["C>>O"],
+            "ChemicalEquation.uid": ["C123"],
+            "ChemicalEquation.random_property": ["hello"],
+            "Extra1.uid": ["ID123"],
+            "Extra1.value": ["DOGE"],
+            "Extra2.uid": ["N123"],
+        }
+        input_df = pd.DataFrame(data_dict)
+
+        # Create expected output dataframes
+        expected_nodes_df = pd.DataFrame(
+            {
+                "node_id": [1, 2],
+                "node_label": ["Label1", "Label2"],
+                "property1": ["prop1", "prop2"],
+            }
+        )
+
+        expected_relationships_df = pd.DataFrame(
+            {
+                "start_node": [1, 2],
+                "end_node": [2, 1],
+                "relationship_type": ["TYPE1", "TYPE2"],
+            }
+        )
+
+        self.preprocessor._process_partition(input_df, 1)

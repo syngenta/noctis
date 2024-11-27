@@ -20,13 +20,6 @@ def _update_partition_dict_with_row(
             target_dict[key] = values
 
 
-def _build_dataframes_from_dict(data_dict: dict[str, dict]) -> dict[str, pd.DataFrame]:
-    data_df = {}
-    for key, values in data_dict.items():
-        data_df[key] = pd.DataFrame(values)
-    return data_df
-
-
 def _save_dataframes_to_partition_csv(
     dict_nodes: dict[str, pd.DataFrame],
     dict_relationships: dict[str, pd.DataFrame],
@@ -34,6 +27,8 @@ def _save_dataframes_to_partition_csv(
     partition_num: int,
 ) -> None:
     output_file_dir = os.path.join(output_dir, f"partition_{partition_num}")
+    print(output_file_dir)
+    print(os.getcwd())
     os.makedirs(output_file_dir, exist_ok=True)
     for key, value in dict_nodes.items():
         filename_nodes = os.path.join(output_file_dir, f"{key.upper()}.csv")
@@ -51,6 +46,7 @@ def save_list_to_partition_csv(my_list, output_dir, name, partition_num):
             writer.writerow(item)
 
 
+# TODO: consider renaming, the name seems to me too general
 def create_noctis_relationship(
     mol_node: Node, ce_node: Node, role: str
 ) -> dict[str : Union[str, dict]]:

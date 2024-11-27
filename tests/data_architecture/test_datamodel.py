@@ -36,13 +36,6 @@ def test_node_hash():
     assert hash(node1) == hash(node2)
 
 
-def test_get_alias_nodes():
-    # Test get_alias method
-    assert Node.get_alias("node_label") == "label"
-    assert Node.get_alias("uid") == "gid"
-    assert Node.get_alias("properties") == "properties"
-
-
 def test_get_attribute():
     # Test get method
     node = Node(node_label="MyNode", uid="AB123", properties={"key": "value"})

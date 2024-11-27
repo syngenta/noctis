@@ -1,10 +1,14 @@
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 
-
-import noctis.data_transformation.preprocessing.graph_expander
 from noctis.data_architecture.graph_schema import GraphSchema
 from noctis.data_transformation.preprocessing.graph_expander import GraphExpander
+from noctis.data_transformation.preprocessing.core_graph_builder import (
+    ValidatedStringBuilder,
+    UnvalidatedStringBuilder,
+    build_core_graph,
+)
+from noctis.data_architecture.datamodel import Node, Relationship
 
 
 class TestGraphExpander(unittest.TestCase):
@@ -12,7 +16,7 @@ class TestGraphExpander(unittest.TestCase):
         self.sample_schema = GraphSchema.build_from_dict(
             {
                 "base_nodes": {"chemical_equation": "CE", "molecule": "M"},
-                "extra_nodes": {"node_1": "LABEL_1", "node_2": "LABEL_2"},
+                "extra_nodes": {"node_1": "LABEL1", "node_2": "LABEL2"},
                 "base_relationships": {
                     "product": {
                         "type": "P",
@@ -46,62 +50,135 @@ class TestGraphExpander(unittest.TestCase):
         self.assertEqual(self.graph_expander.nodes, {})
         self.assertEqual(self.graph_expander.relationships, {})
 
+    @patch(
+        "noctis.data_transformation.preprocessing.graph_expander.ValidatedStringBuilder"
+    )
+    @patch(
+        "noctis.data_transformation.preprocessing.graph_expander.build_core_graph",
+        side_effect=build_core_graph,
+    )
     @patch.object(GraphExpander, "_expand_extra_nodes")
     @patch.object(GraphExpander, "_expand_extra_relationships")
-    @patch.object(
-        noctis.data_transformation.preprocessing.graph_expander.ReactionPreProcessor,
-        "build_from_string_w_validation",
-    )
     def test_expand_from_csv_with_validation(
-        self, mock_build, mock_expand_relationships, mock_expand_nodes
+        self,
+        mock_expand_relationships,
+        mock_expand_nodes,
+        mock_build_core_graph,
+        MockValidatedStringBuilder,
     ):
-        mock_build.return_value = (
-            {"node1": {"attr": "val"}},
-            {"rel1": {"type": "REL"}},
-        )
-        step_dict = {"CE": "A + B -> C", "extra_data": {"prop": "value"}}
+        # Arrange
+        mock_processor = Mock(spec=ValidatedStringBuilder)
 
+        # Create mock Node and Relationship objects
+        mock_ce_node = Mock(spec=Node)
+        mock_molecule_node = Mock(spec=Node)
+        mock_relationship = Mock(spec=Relationship)
+
+        # Set up the return value for the process method
+        mock_processor.process.return_value = (
+            {"chemical_equation": [mock_ce_node], "molecule": [mock_molecule_node]},
+            {"reactant": [mock_relationship], "product": []},
+        )
+
+        MockValidatedStringBuilder.return_value = mock_processor
+
+        step_dict = {
+            "CE": {
+                "smiles": "C>>O",
+                "properties": {"prop1": "value1", "prop2": "value2"},
+            },
+            "extra_data": {"prop": "value"},
+        }
+
+        # Act
         nodes, relationships = self.graph_expander.expand_from_csv(
-            step_dict, "smiles", "inchi", True
+            step_dict, "smiles", "smarts", True
         )
 
-        mock_build.assert_called_once_with("A + B -> C", "smiles", "inchi")
+        # Assert
+        MockValidatedStringBuilder.assert_called_once_with(
+            input_format="smiles", output_format="smarts"
+        )
+        mock_processor.process.assert_called_once_with(
+            {"smiles": "C>>O", "properties": {"prop1": "value1", "prop2": "value2"}}
+        )
         mock_expand_nodes.assert_called_once_with(step_dict)
         mock_expand_relationships.assert_called_once()
-        self.assertIn("node1", nodes)
-        self.assertIn("rel1", relationships)
 
+        # Check that the returned nodes and relationships match what we expect
+        self.assertEqual(nodes["chemical_equation"], [mock_ce_node])
+        self.assertEqual(nodes["molecule"], [mock_molecule_node])
+        self.assertEqual(relationships["reactant"], [mock_relationship])
+        self.assertEqual(relationships["product"], [])
+
+    @patch(
+        "noctis.data_transformation.preprocessing.graph_expander.UnvalidatedStringBuilder"
+    )
+    @patch(
+        "noctis.data_transformation.preprocessing.graph_expander.build_core_graph",
+        side_effect=build_core_graph,
+    )
     @patch.object(GraphExpander, "_expand_extra_nodes")
     @patch.object(GraphExpander, "_expand_extra_relationships")
-    @patch.object(
-        noctis.data_transformation.preprocessing.graph_expander.ReactionPreProcessor,
-        "build_from_string",
-    )
     def test_expand_from_csv_without_validation(
-        self, mock_build, mock_expand_relationships, mock_expand_nodes
+        self,
+        mock_expand_relationships,
+        mock_expand_nodes,
+        mock_build_core_graph,
+        MockUnvalidatedStringBuilder,
     ):
-        mock_build.return_value = (
-            {"node1": {"attr": "val"}},
-            {"rel1": {"type": "REL"}},
-        )
-        step_dict = {"CE": "A + B -> C", "extra_data": {"prop": "value"}}
+        # Arrange
+        mock_processor = Mock(spec=UnvalidatedStringBuilder)
 
+        # Create mock Node and Relationship objects
+        mock_ce_node = Mock(spec=Node)
+        mock_molecule_node = Mock(spec=Node)
+        mock_relationship = Mock(spec=Relationship)
+
+        # Set up the return value for the process method
+        mock_processor.process.return_value = (
+            {"chemical_equation": [mock_ce_node], "molecule": [mock_molecule_node]},
+            {"reactant": [mock_relationship], "product": []},
+        )
+
+        MockUnvalidatedStringBuilder.return_value = mock_processor
+
+        step_dict = {
+            "CE": {
+                "smiles": "C>>O",
+                "properties": {"prop1": "value1", "prop2": "value2"},
+            },
+            "extra_data": {"prop": "value"},
+        }
+
+        # Act
         nodes, relationships = self.graph_expander.expand_from_csv(
-            step_dict, "smiles", "inchi", False
+            step_dict, "smiles", "smarts", False
         )
 
-        mock_build.assert_called_once_with("A + B -> C", "smiles")  # Update this line
+        # Assert
+        MockUnvalidatedStringBuilder.assert_called_once_with(input_format="smiles")
+        mock_processor.process.assert_called_once_with(
+            {"smiles": "C>>O", "properties": {"prop1": "value1", "prop2": "value2"}}
+        )
         mock_expand_nodes.assert_called_once_with(step_dict)
         mock_expand_relationships.assert_called_once()
-        self.assertIn("node1", nodes)
-        self.assertIn("rel1", relationships)
+
+        # Check that the returned nodes and relationships match what we expect
+        self.assertEqual(nodes["chemical_equation"], [mock_ce_node])
+        self.assertEqual(nodes["molecule"], [mock_molecule_node])
+        self.assertEqual(relationships["reactant"], [mock_relationship])
+        self.assertEqual(relationships["product"], [])
 
     def test_expand_extra_nodes(self):
         # Setup
+        self.graph_expander.schema.extra_nodes = {
+            "node_1": "LABEL1",
+            "node_2": "LABEL2",
+        }
         step_dict = {
-            "CE": ["A + B -> C"],
-            "LABEL_1": {"attr": "value"},
-            "LABEL_2": {"attr": "value2"},
+            "LABEL1": {"uid": "A123", "properties": {"attr": "value"}},
+            "LABEL2": {"uid": "B123", "properties": {"attr": "value"}},
         }
 
         # Execute
@@ -109,8 +186,12 @@ class TestGraphExpander(unittest.TestCase):
 
         # Assert
         expected_nodes = {
-            "node_1": [{"attr": "value", "label": "LABEL_1"}],
-            "node_2": [{"attr": "value2", "label": "LABEL_2"}],
+            "node_1": [
+                Node(uid="A123", node_label="LABEL1", properties={"attr": "value"})
+            ],
+            "node_2": [
+                Node(uid="B123", node_label="LABEL2", properties={"attr": "value"})
+            ],
         }
         self.assertEqual(self.graph_expander.nodes, expected_nodes)
 
@@ -118,10 +199,12 @@ class TestGraphExpander(unittest.TestCase):
         # Setup
         self.graph_expander.nodes = {
             "node_1": [
-                {"attr": "value1", "label": "LABEL_1"},
-                {"attr": "value2", "label": "LABEL_1"},
+                Node(uid="A123", node_label="LABEL1", properties={"attr": "value1"}),
+                Node(uid="A124", node_label="LABEL1", properties={"attr": "value2"}),
             ],
-            "node_2": [{"attr": "value3", "label": "LABEL_2"}],
+            "node_2": [
+                Node(uid="B123", node_label="LABEL2", properties={"attr": "value3"})
+            ],
         }
 
         # Execute
@@ -130,28 +213,44 @@ class TestGraphExpander(unittest.TestCase):
         # Assert
         expected_relationships = {
             "rel1": [
-                {
-                    "end_node": {"attr": "value3", "label": "LABEL_2"},
-                    "start_node": {"attr": "value1", "label": "LABEL_1"},
-                    "type": "REL1",
-                },
-                {
-                    "end_node": {"attr": "value3", "label": "LABEL_2"},
-                    "start_node": {"attr": "value2", "label": "LABEL_1"},
-                    "type": "REL1",
-                },
+                Relationship(
+                    relationship_type="REL1",
+                    start_node=Node(
+                        uid="A123", node_label="LABEL1", properties={"attr": "value1"}
+                    ),
+                    end_node=Node(
+                        uid="B123", node_label="LABEL2", properties={"attr": "value3"}
+                    ),
+                ),
+                Relationship(
+                    relationship_type="REL1",
+                    start_node=Node(
+                        uid="A124", node_label="LABEL1", properties={"attr": "value2"}
+                    ),
+                    end_node=Node(
+                        uid="B123", node_label="LABEL2", properties={"attr": "value3"}
+                    ),
+                ),
             ],
             "rel2": [
-                {
-                    "end_node": {"attr": "value1", "label": "LABEL_1"},
-                    "start_node": {"attr": "value3", "label": "LABEL_2"},
-                    "type": "REL2",
-                },
-                {
-                    "end_node": {"attr": "value2", "label": "LABEL_1"},
-                    "start_node": {"attr": "value3", "label": "LABEL_2"},
-                    "type": "REL2",
-                },
+                Relationship(
+                    relationship_type="REL2",
+                    start_node=Node(
+                        uid="B123", node_label="LABEL2", properties={"attr": "value3"}
+                    ),
+                    end_node=Node(
+                        uid="A123", node_label="LABEL1", properties={"attr": "value1"}
+                    ),
+                ),
+                Relationship(
+                    relationship_type="REL2",
+                    start_node=Node(
+                        uid="B123", node_label="LABEL2", properties={"attr": "value3"}
+                    ),
+                    end_node=Node(
+                        uid="A124", node_label="LABEL1", properties={"attr": "value2"}
+                    ),
+                ),
             ],
         }
 

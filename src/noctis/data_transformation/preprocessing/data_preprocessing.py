@@ -1,16 +1,28 @@
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass
-from dask.distributed import Client, wait
+from dask.distributed import Client
 import pandas as pd
 import dask.dataframe as dd
-import os
-import csv
+
+from noctis.data_transformation.neo4j.neo4j_csv_styling import Neo4jImportStyle
+
+from noctis.utilities import console_logger
+
+logger = console_logger(__name__)
+
+
+class MissingUIDError(Exception):
+    """Custom error for when a UID is missing for a node."""
+
+    def __init__(self, label):
+        self.message = f"Missing 'uid' for node with label '{label}'"
+        super().__init__(self.message)
+
 
 from noctis.data_transformation.preprocessing.utils import (
     _save_dataframes_to_partition_csv,
     _update_partition_dict_with_row,
-    _build_dataframes_from_dict,
 )
 
 from noctis.data_transformation.preprocessing.graph_expander import GraphExpander
@@ -91,8 +103,10 @@ class FilePreprocessor:
             _update_partition_dict_with_row(nodes_partition, nodes_row)
             _update_partition_dict_with_row(relationships_partition, relationships_row)
 
-        df_nodes = _build_dataframes_from_dict(nodes_partition)
-        df_relationships = _build_dataframes_from_dict(relationships_partition)
+        df_nodes = Neo4jImportStyle.export_nodes(nodes_partition)
+        df_relationships = Neo4jImportStyle.export_relationships(
+            relationships_partition
+        )
         _save_dataframes_to_partition_csv(
             df_nodes,
             df_relationships,
@@ -113,7 +127,7 @@ class FilePreprocessor:
 
         return nodes, relationships
 
-    def _split_row_by_node_types(self, row: pd.Series) -> dict[str, dict[str, str]]:
+    def _split_row_by_node_types(self, row: pd.Series) -> dict[str, dict]:
         node_data = {}
 
         for column, value in row.items():
@@ -122,7 +136,16 @@ class FilePreprocessor:
             if len(parts) == 2:
                 label, property_name = parts
                 if label not in node_data:
-                    node_data[label] = {}
-                node_data[label][property_name] = value
+                    node_data[label] = {"properties": {}}
+
+                if property_name == "uid":
+                    node_data[label]["uid"] = value
+                else:
+                    node_data[label]["properties"][property_name] = value
+
+        for label, data in node_data.items():
+            if label not in self.schema.base_nodes.values() and "uid" not in data:
+                logger.error(f"Missing uid column in node {label}")
+                raise MissingUIDError(label)
 
         return node_data

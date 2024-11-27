@@ -73,7 +73,8 @@ class ValidatedStringBuilder(CoreGraphBuilder):
         relationships = {"reactant": [], "product": []}
 
         chemical_equation = ChemicalEquationConstructor().build_from_reaction_string(
-            reaction_string=reaction_data[self.input_format], inp_fmt=self.input_format
+            reaction_string=reaction_data["properties"][self.input_format],
+            inp_fmt=self.input_format,
         )
         if chemical_equation is None:
             logger.error("The returned ChemicalEquation object is None")
@@ -126,7 +127,7 @@ class ValidatedStringBuilder(CoreGraphBuilder):
         for molecule in mol_list:
             mol_uid = "M" + str(molecule.uid)
             mol_label = settings.nodes.node_molecule
-            mol_validated_string = self.mol_to_string(molecule)
+            mol_validated_string = self.mol_to_string(molecule.rdmol)
             molecule_node = create_noctis_node(
                 node_uid=mol_uid,
                 node_label=mol_label,
@@ -162,7 +163,8 @@ class UnvalidatedStringBuilder(CoreGraphBuilder):
         nodes = {"chemical_equation": [], "molecule": []}
         relationships = {"reactant": [], "product": []}
 
-        reaction_string = reaction_data[self.input_format]
+        # reaction_string = reaction_data[self.input_format]
+        reaction_string = reaction_data["properties"][self.input_format]
         chemical_equation_node = self._handle_chemical_reaction_string(
             reaction_data=reaction_data
         )
@@ -186,10 +188,12 @@ class UnvalidatedStringBuilder(CoreGraphBuilder):
 
     def _handle_chemical_reaction_string(self, reaction_data: dict) -> Node:
         """T create a noctis Node from a reaction string"""
-        reaction_string = reaction_data[self.input_format]
+        reaction_string = reaction_data["properties"][self.input_format]
         reaction_uid = "C" + str(create_hash(reaction_string))
         properties = reaction_data.get("properties", {})
-        properties.update({self.input_format: reaction_string})
+        if "uid" in reaction_data:
+            logger.warning("Found custom uid. It will be included in the properties.")
+            properties.update({"custom_uid": reaction_data["uid"]})
         return create_noctis_node(
             reaction_uid, settings.nodes.node_chemequation, properties
         )

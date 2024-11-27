@@ -9,25 +9,11 @@ from typing import List, Optional
 # TODO: load_from_dict methods to be revised
 
 
-class DataModelAttributes:
-    RELATIONSHIP_TYPE = "relationship_type"
-    START_NODE = "start_node"
-    END_NODE = "end_node"
-    RELATIONSHIP_PROPERTIES = "properties"
-    NODE_LABEL = "node_label"
-    UID = "uid"
-    NODE_PROPERTIES = "properties"
-
-
 class Node(BaseModel):
     model_config = ConfigDict(populate_by_name=True, frozen=True)
-    node_label: Annotated[
-        str, StringConstraints(pattern=r"^[A-Z][\w\-.]*$"), Field(alias="label")
-    ]
-    uid: Annotated[
-        str, StringConstraints(pattern=r"^[A-Z]{1,2}\d+$"), Field(alias="gid")
-    ]
-    properties: Annotated[Optional[dict], Field(default={}, alias="properties")]
+    node_label: Annotated[str, StringConstraints(pattern=r"^[A-Z][\w\-.]*$")]
+    uid: Annotated[str, StringConstraints(pattern=r"^[A-Z]{1,2}\d+$")]
+    properties: Annotated[Optional[dict], Field(default={})]
 
     def __hash__(self):
         return self.uid.__hash__()
@@ -35,21 +21,15 @@ class Node(BaseModel):
     def __eq__(self, other):
         return isinstance(other, Node) and self.uid == other.uid
 
-    @classmethod
-    def get_alias(cls, attribute_name: str) -> str:
-        return cls.model_fields[attribute_name].alias
-
     def get(self, attribute_name: str) -> any:
         return getattr(self, attribute_name)
 
 
 class Relationship(BaseModel):
     model_config = ConfigDict(populate_by_name=True, frozen=True)
-    relationship_type: Annotated[
-        str, StringConstraints(pattern=r"^[A-Z0-9_.-]+$"), Field(alias="type")
-    ]
-    start_node: Annotated[Node, Field(alias="startnode")]
-    end_node: Annotated[Node, Field(alias="endnode")]
+    relationship_type: Annotated[str, StringConstraints(pattern=r"^[A-Z0-9_.-]+$")]
+    start_node: Node
+    end_node: Node
     properties: Annotated[Optional[dict], Field(default={})]
 
     @property
@@ -64,10 +44,6 @@ class Relationship(BaseModel):
             isinstance(other, Relationship)
             and self.start_end_uids == other.start_end_uids
         )
-
-    @classmethod
-    def get_attribute_alias(cls, attribute_name: str) -> str:
-        return cls.model_fields[attribute_name].alias
 
     def get(self, attribute_name: str) -> any:
         return getattr(self, attribute_name)

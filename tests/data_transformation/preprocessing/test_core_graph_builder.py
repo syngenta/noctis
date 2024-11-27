@@ -212,7 +212,7 @@ def test_expand_molecules(
 
 
 def test_process_method(validated_string_builder):
-    reaction_data = {"smiles": "CC(=O)O.O>>CC(O)=O", "temperature": 25}
+    reaction_data = {"properties": {"smiles": "CC(=O)O.O>>CC(O)=O", "temperature": 25}}
 
     mock_constructor = Mock(spec=ChemicalEquationConstructor)
     mock_chemical_equation = Mock()
@@ -281,7 +281,7 @@ def test_process_method(validated_string_builder):
 
 
 def test_process_method_none_chemical_equation(validated_string_builder):
-    reaction_data = {"smiles": "invalid_smiles", "temperature": 25}
+    reaction_data = {"properties": {"smiles": "invalid_smiles", "temperature": 25}}
 
     mock_constructor = Mock(spec=ChemicalEquationConstructor)
     mock_constructor.return_value.build_from_reaction_string.return_value = None
@@ -316,7 +316,8 @@ def unvalidated_string_builder():
 
 
 def test_handle_chemical_reaction_string(unvalidated_string_builder):
-    reaction_data = {"smiles": "CC(=O)O.O>>CC(O)=O", "properties": {"temperature": 25}}
+    # reaction_data = {"smiles": "CC(=O)O.O>>CC(O)=O", "properties": {"temperature": 25}}
+    reaction_data = {"properties": {"smiles": "CC(=O)O.O>>CC(O)=O", "temperature": 25}}
 
     with patch(
         "noctis.data_transformation.preprocessing.core_graph_builder.create_hash"
@@ -410,7 +411,8 @@ def test_expand_mol_strings_empty_list(unvalidated_string_builder):
 @patch("noctis.data_transformation.preprocessing.core_graph_builder.create_hash")
 def test_build_core_graph(mock_hash, unvalidated_string_builder):
     mock_hash.side_effect = ["111", "222", "333", "444"]
-    reaction_data = {"smiles": "CC(=O)O.O>>CC(O)=O", "properties": {"temperature": 25}}
+    # reaction_data = {"smiles": "CC(=O)O.O>>CC(O)=O", "properties": {"temperature": 25}}
+    reaction_data = {"properties": {"smiles": "CC(=O)O.O>>CC(O)=O", "temperature": 25}}
     nodes, relationships = build_core_graph(
         reaction_data=reaction_data, builder=unvalidated_string_builder
     )
