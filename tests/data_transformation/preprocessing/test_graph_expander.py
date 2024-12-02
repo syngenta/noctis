@@ -255,3 +255,100 @@ class TestGraphExpander(unittest.TestCase):
         }
 
         self.assertEqual(self.graph_expander.relationships, expected_relationships)
+
+    @patch("noctis.data_transformation.preprocessing.graph_expander.logger")
+    def test_expand_extra_nodes_warning_on_missing_node(self, mock_logger):
+        # Setup
+        self.graph_expander.schema.extra_nodes = {
+            "node_1": "LABEL1",
+            "node_2": "LABEL2",
+        }
+        step_dict = {
+            "LABEL1": {"uid": "A123", "properties": {"attr": "value"}},
+            # LABEL2 is intentionally missing
+        }
+
+        # Execute
+        self.graph_expander._expand_extra_nodes(step_dict)
+
+        # Assert
+        mock_logger.warning.assert_called_once_with(
+            "Node with label 'LABEL2' is missing in step_dict. Skipping this node."
+        )
+
+    @patch("noctis.data_transformation.preprocessing.graph_expander.logger")
+    def test_expand_extra_relationships_warning_on_missing_start_node(
+        self, mock_logger
+    ):
+        # Setup
+        self.graph_expander.nodes = {
+            "node_2": [
+                Node(uid="B123", node_label="LABEL2", properties={"attr": "value"})
+            ]
+            # node_1 is intentionally missing
+        }
+
+        # Execute
+        self.graph_expander._expand_extra_relationships()
+
+        # Assert
+        mock_logger.warning.assert_any_call(
+            "Start node 'node_1' is missing for relationship 'rel1'. Skipping this relationship."
+        )
+        mock_logger.warning.assert_any_call(
+            "End node 'node_1' is missing for relationship 'rel2'. Skipping this relationship."
+        )
+
+    @patch("noctis.data_transformation.preprocessing.graph_expander.logger")
+    def test_expand_extra_relationships_warning_on_missing_end_node(self, mock_logger):
+        # Setup
+        self.graph_expander.nodes = {
+            "node_1": [
+                Node(uid="A123", node_label="LABEL1", properties={"attr": "value"})
+            ]
+            # node_2 is intentionally missing
+        }
+
+        # Execute
+        self.graph_expander._expand_extra_relationships()
+
+        # Assert
+        mock_logger.warning.assert_any_call(
+            "End node 'node_2' is missing for relationship 'rel1'. Skipping this relationship."
+        )
+        mock_logger.warning.assert_any_call(
+            "Start node 'node_2' is missing for relationship 'rel2'. Skipping this relationship."
+        )
+
+    @patch("noctis.data_transformation.preprocessing.graph_expander.logger")
+    @patch("noctis.data_transformation.preprocessing.graph_expander.build_core_graph")
+    @patch(
+        "noctis.data_transformation.preprocessing.graph_expander.UnvalidatedStringBuilder"
+    )
+    def test_expand_from_csv_warnings_on_missing_data(
+        self, MockUnvalidatedStringBuilder, mock_build_core_graph, mock_logger
+    ):
+        # Setup
+        mock_processor = Mock()
+        MockUnvalidatedStringBuilder.return_value = mock_processor
+        mock_build_core_graph.return_value = ({}, {})  # Empty core graph
+
+        step_dict = {
+            "CE": {"smiles": "C>>O"},
+            "LABEL1": {"uid": "A123", "properties": {"attr": "value"}},
+            # LABEL2 is intentionally missing
+        }
+
+        # Execute
+        self.graph_expander.expand_from_csv(step_dict, "smiles", "smarts", False)
+
+        # Assert
+        mock_logger.warning.assert_any_call(
+            "Node with label 'LABEL2' is missing in step_dict. Skipping this node."
+        )
+        mock_logger.warning.assert_any_call(
+            "End node 'node_2' is missing for relationship 'rel1'. Skipping this relationship."
+        )
+        mock_logger.warning.assert_any_call(
+            "Start node 'node_2' is missing for relationship 'rel2'. Skipping this relationship."
+        )

@@ -10,6 +10,9 @@ from noctis.data_transformation.preprocessing.core_graph_builder import (
 from noctis.data_architecture.graph_schema import GraphSchema
 
 from noctis.data_architecture.datamodel import Node, Relationship
+from noctis.utilities import console_logger
+
+logger = console_logger(__name__)
 
 
 class GraphExpander:
@@ -65,6 +68,11 @@ class GraphExpander:
 
     def _expand_extra_nodes(self, step_dict):
         for tag, label in self.schema.extra_nodes.items():
+            if label not in step_dict:
+                logger.warning(
+                    f"Node with label '{label}' is missing in step_dict. Skipping this node."
+                )
+                continue
             node = step_dict[
                 label
             ].copy()  # Create a copy to avoid modifying the original
@@ -79,6 +87,19 @@ class GraphExpander:
         for tag, relationship_schema in self.schema.extra_relationships.items():
             start_node = relationship_schema["start_node"]
             end_node = relationship_schema["end_node"]
+
+            if start_node not in self.nodes:
+                logger.warning(
+                    f"Start node '{start_node}' is missing for relationship '{tag}'. Skipping this relationship."
+                )
+                continue
+
+            if end_node not in self.nodes:
+                logger.warning(
+                    f"End node '{end_node}' is missing for relationship '{tag}'. Skipping this relationship."
+                )
+                continue
+
             for node in self.nodes[start_node]:
                 for another_node in self.nodes[end_node]:
                     relationship = Relationship(

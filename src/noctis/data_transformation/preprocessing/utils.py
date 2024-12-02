@@ -85,3 +85,24 @@ def explode_smiles_like_reaction_string(
 
 def explode_v3000_reaction_string(reaction_string: str) -> tuple[list[str], list[str]]:
     raise NotImplementedError
+
+
+def dict_to_list(d: dict[str, list]) -> list:
+    return [item for sublist in d.values() for item in sublist]
+
+
+from noctis.data_architecture.datamodel import (
+    Node,
+    Relationship,
+    GraphRecord,
+    DataContainer,
+)
+
+
+def create_data_container(
+    nodes: list[Node], relationships: list[Relationship]
+) -> DataContainer:
+    graph_record = GraphRecord(nodes=nodes, relationships=relationships)
+    data_container = DataContainer()
+    data_container.add_record(graph_record)
+    return data_container
