@@ -285,6 +285,7 @@ def test_process_method_none_chemical_equation(validated_string_builder):
 
     mock_constructor = Mock(spec=ChemicalEquationConstructor)
     mock_constructor.return_value.build_from_reaction_string.return_value = None
+    mock_constructor.return_value.build_from_reaction_string.return_value = None
 
     with patch(
         "noctis.data_transformation.preprocessing.core_graph_builder.ChemicalEquationConstructor",

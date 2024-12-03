@@ -18,9 +18,10 @@ from noctis.data_architecture.datamodel import (
     GraphRecord,
 )
 from noctis.data_transformation.preprocessing.utils import create_data_container
-from noctis.data_transformation.neo4j.neo4j_csv_styling import Neo4jImportStyle
 from linchemin.cgu.syngraph_operations import extract_reactions_from_syngraph
 from abc import ABC, abstractmethod
+from noctis.data_transformation.data_styles.dataframe_stylers import Neo4jImportStyle
+
 from noctis.utilities import console_logger
 from typing import Union
 

@@ -2,7 +2,7 @@ from noctis.data_architecture.datamodel import Node, Relationship
 import pandas as pd
 
 
-class Neo4jStyle:
+class NodesRelationshipsStyle:
     COLUMN_NAMES_NODES: dict[str, str] = {}
     COLUMN_NAMES_RELATIONSHIPS: dict[str, str] = {}
     EXPAND_PROPERTIES: bool = True
@@ -62,7 +62,7 @@ class Neo4jStyle:
         nodes_dict = [dict(item) for item in nodes]
         df = pd.DataFrame(nodes_dict)
         if expand_properties:
-            df = Neo4jStyle._expand_properties_in_dataframe(df)
+            df = NodesRelationshipsStyle._expand_properties_in_dataframe(df)
         return df
 
     @staticmethod
@@ -80,7 +80,7 @@ class Neo4jStyle:
         ]
         df = pd.DataFrame(relationships_dict)
         if expand_properties:
-            df = Neo4jStyle._expand_properties_in_dataframe(df)
+            df = NodesRelationshipsStyle._expand_properties_in_dataframe(df)
         return df
 
     @staticmethod
@@ -93,7 +93,7 @@ class Neo4jStyle:
         return df.rename(columns={col: rename_dict.get(col, col) for col in df.columns})
 
 
-class Neo4jImportStyle(Neo4jStyle):
+class Neo4jImportStyle(NodesRelationshipsStyle):
     COLUMN_NAMES_NODES = {
         "uid": "uid:ID",
         "node_label": ":LABEL",
@@ -106,7 +106,7 @@ class Neo4jImportStyle(Neo4jStyle):
     EXPAND_PROPERTIES = True
 
 
-class Neo4jLoadStyle(Neo4jStyle):
+class Neo4jLoadStyle(NodesRelationshipsStyle):
     COLUMN_NAMES_NODES = {
         "node_label": "label",
     }
@@ -116,3 +116,9 @@ class Neo4jLoadStyle(Neo4jStyle):
         "relationship_type": "type",
     }
     EXPAND_PROPERTIES = False
+
+
+class PandasExportStyle(NodesRelationshipsStyle):
+    COLUMN_NAMES_NODES = {}
+    COLUMN_NAMES_RELATIONSHIPS = {}
+    EXPAND_PROPERTIES = True
