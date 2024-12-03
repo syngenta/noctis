@@ -93,31 +93,6 @@ class NodesRelationshipsStyle:
         return df.rename(columns={col: rename_dict.get(col, col) for col in df.columns})
 
 
-class Neo4jImportStyle(NodesRelationshipsStyle):
-    COLUMN_NAMES_NODES = {
-        "uid": "uid:ID",
-        "node_label": ":LABEL",
-    }
-    COLUMN_NAMES_RELATIONSHIPS = {
-        "start_node": "uid:START_ID",
-        "end_node": "uid:END_ID",
-        "relationship_type": ":TYPE",
-    }
-    EXPAND_PROPERTIES = True
-
-
-class Neo4jLoadStyle(NodesRelationshipsStyle):
-    COLUMN_NAMES_NODES = {
-        "node_label": "label",
-    }
-    COLUMN_NAMES_RELATIONSHIPS = {
-        "start_node": "startnode",
-        "end_node": "endnode",
-        "relationship_type": "type",
-    }
-    EXPAND_PROPERTIES = False
-
-
 class PandasExportStyle(NodesRelationshipsStyle):
     COLUMN_NAMES_NODES = {}
     COLUMN_NAMES_RELATIONSHIPS = {}

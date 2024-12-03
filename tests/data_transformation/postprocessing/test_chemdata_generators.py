@@ -1,9 +1,8 @@
 import unittest
 
 import pytest
-from abc import ABC, abstractmethod
-from unittest.mock import Mock, patch, call
-from typing import Type
+from abc import ABC
+from unittest.mock import Mock, patch
 import pandas as pd
 import networkx as nx
 

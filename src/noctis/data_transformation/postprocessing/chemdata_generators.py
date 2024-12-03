@@ -9,7 +9,9 @@ from noctis.data_architecture.datamodel import (
     Relationship,
 )
 from noctis.data_transformation.data_styles.dataframe_stylers import PandasExportStyle
-from linchemin.cgu.syngraph import SynGraph, BipartiteSynGraph
+
+from linchemin.cgu.syngraph import BipartiteSynGraph
+
 from typing import Union
 from noctis import settings
 
