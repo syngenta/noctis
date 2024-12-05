@@ -27,8 +27,6 @@ def _save_dataframes_to_partition_csv(
     partition_num: int,
 ) -> None:
     output_file_dir = os.path.join(output_dir, f"partition_{partition_num}")
-    print(output_file_dir)
-    print(os.getcwd())
     os.makedirs(output_file_dir, exist_ok=True)
     for key, value in dict_nodes.items():
         filename_nodes = os.path.join(output_file_dir, f"{key.upper()}.csv")
@@ -38,12 +36,17 @@ def _save_dataframes_to_partition_csv(
         value.to_csv(filename_relationships, index=False)
 
 
-def save_list_to_partition_csv(my_list, output_dir, name, partition_num):
-    output_file = os.path.join(output_dir, f"partition_{partition_num}", f"{name}.csv")
+def _save_list_to_partition_csv(my_list, header, output_dir, name, partition_num):
+    output_file_dir = os.path.join(output_dir, f"partition_{partition_num}")
+    os.makedirs(output_file_dir, exist_ok=True)  # Create directory if it doesn't exist
+
+    output_file = os.path.join(output_file_dir, f"{name}.csv")
+    print(output_file)
     with open(output_file, "w", newline="\n") as file:
         writer = csv.writer(file)
+        writer.writerow([header])  # Write header as a single-item list
         for item in my_list:
-            writer.writerow(item)
+            writer.writerow([item])
 
 
 # TODO: consider renaming, the name seems to me too general

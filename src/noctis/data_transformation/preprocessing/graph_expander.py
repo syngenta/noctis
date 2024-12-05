@@ -21,7 +21,7 @@ class GraphExpander:
         self.nodes = {}
         self.relationships = {}
 
-    def expand_from_csv(
+    def expand_reaction_step(
         self, step_dict: dict[str, dict], input_format, output_format, validation
     ) -> tuple[dict[str:dict], dict[str:dict]]:
         # expand core schema
@@ -34,15 +34,6 @@ class GraphExpander:
                 reaction_data=step_dict[self.schema.base_nodes["chemical_equation"]],
                 builder=processor,
             )
-            # dict[str:[Node]], dict[str:[Relationships]]
-            # (
-            #     base_nodes,
-            #     base_relationships,
-            # ) = ReactionPreProcessor.build_from_string_w_validation(
-            #     step_dict[self.schema.base_nodes["chemical_equation"]],
-            #     input_format,
-            #     output_format,
-            # )
         else:
             processor = UnvalidatedStringBuilder(input_format=input_format)
 
@@ -50,10 +41,6 @@ class GraphExpander:
                 reaction_data=step_dict[self.schema.base_nodes["chemical_equation"]],
                 builder=processor,
             )
-            # base_nodes, base_relationships = ReactionPreProcessor.build_from_string(
-            #     step_dict[self.schema.base_nodes["chemical_equation"]],
-            #     input_format,
-            # )
 
         self.nodes.update(base_nodes)
         self.relationships.update(base_relationships)

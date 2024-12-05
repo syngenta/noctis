@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, patch, call, mock_open
 import pandas as pd
 
 import noctis.data_transformation.preprocessing.data_preprocessing
@@ -14,6 +14,10 @@ from noctis.data_transformation.preprocessing.data_preprocessing import (
     PythonObjectPreprocessorFactory,
     PythonObjectPreprocessorInterface,
     DataFramePreprocessor,
+    NoPreprocessorError,
+    MissingUIDError,
+    NoChemicalStringError,
+    EmptyHeaderError,
 )
 from noctis.data_architecture.graph_schema import GraphSchema
 from noctis.data_architecture.datamodel import DataContainer, Node, Relationship
@@ -35,27 +39,26 @@ class TestPreprocessor(unittest.TestCase):
     def test_preprocess_csv_for_neo4j(self, mock_csv_preprocessor):
         schema = {"some": "schema"}
         config = PreprocessorConfig(
-            input_file="test.csv",
-            output_folder="/output",
-            tmp_folder="/tmp",
+            output_folder="output",
+            tmp_folder="tmp",
             validation=True,
             parallel=False,
-            prefix="test_",
-            blocksize=64,
+            prefix="K",
+            blocksize=10,
             chunksize=1000,
             inp_chem_format="smiles",
             out_chem_format="smiles",
         )
         preprocessor = Preprocessor(schema)
-
+        input_file = "test.csv"
         # Create a mock instance for CSVPreprocessor
         mock_csv_instance = Mock()
         mock_csv_preprocessor.return_value = mock_csv_instance
 
-        preprocessor.preprocess_csv_for_neo4j(config)
+        preprocessor.preprocess_csv_for_neo4j(input_file, config)
 
         mock_csv_preprocessor.assert_called_once_with(schema, config)
-        mock_csv_instance.run.assert_called_once()
+        mock_csv_instance.run.assert_called_once_with(input_file)
 
     def test_preprocessor_initialization(self):
         schema = {"some": "schema"}
@@ -70,13 +73,12 @@ class TestPreprocessor(unittest.TestCase):
     def test_preprocess_object_for_neo4j(self, mock_factory):
         schema = {"some": "schema"}
         config = PreprocessorConfig(
-            input_file="test.csv",
-            output_folder="/output",
-            tmp_folder="/tmp",
+            output_folder="output",
+            tmp_folder="tmp",
             validation=True,
             parallel=False,
-            prefix="test_",
-            blocksize=64,
+            prefix="K",
+            blocksize=100,
             chunksize=1000,
             inp_chem_format="smiles",
             out_chem_format="smiles",
@@ -127,14 +129,66 @@ class TestPreprocessor(unittest.TestCase):
         mock_preprocessor.run.assert_called_once_with(syngraph_data)
         self.assertEqual(result, mock_data_container)
 
+    def test_get_failed_strings_for_csv_preprocessor(self):
+        preprocessor = Preprocessor()
+        mock_csv_preprocessor = Mock(spec=CSVPreprocessor)
+        mock_config = Mock()
+        mock_config.output_folder = "/output"
+        mock_csv_preprocessor.config = mock_config
+        preprocessor.preprocessor = mock_csv_preprocessor
+
+        with patch("builtins.print") as mock_print:
+            result = preprocessor.get_failed_strings()
+
+        self.assertIsNone(result)
+
+    def test_get_failed_strings_for_python_object_preprocessor(self):
+        preprocessor = Preprocessor()
+        mock_python_preprocessor = Mock(spec=ReactionStringsPreprocessor)
+        mock_python_preprocessor.failed_strings = ["failed1", "failed2"]
+        preprocessor.preprocessor = mock_python_preprocessor
+
+        result = preprocessor.get_failed_strings()
+
+        self.assertEqual(result, ["failed1", "failed2"])
+
+    def test_get_failed_strings_no_preprocessor(self):
+        preprocessor = Preprocessor()
+
+        with self.assertRaises(NoPreprocessorError):
+            preprocessor.get_failed_strings()
+
+    def test_preprocess_csv_for_neo4j_default_config(self):
+        schema = GraphSchema()
+        preprocessor = Preprocessor(schema)
+        with patch(
+            "noctis.data_transformation.preprocessing.data_preprocessing.CSVPreprocessor"
+        ) as mock_csv_preprocessor:
+            preprocessor.preprocess_csv_for_neo4j("input.csv")
+            mock_csv_preprocessor.assert_called_once_with(schema, PreprocessorConfig())
+
+    def test_preprocess_object_for_neo4j_default_config(self):
+        schema = GraphSchema()
+        preprocessor = Preprocessor(schema)
+        mock_data = pd.DataFrame()
+        with patch(
+            "noctis.data_transformation.preprocessing.data_preprocessing.PythonObjectPreprocessorFactory"
+        ) as mock_factory:
+            preprocessor.preprocess_object_for_neo4j(mock_data, "dataframe")
+            mock_factory.get_preprocessor.assert_called_once_with(
+                "dataframe", schema, PreprocessorConfig()
+            )
+
 
 class TestPandasRowPreprocessor(unittest.TestCase):
     def setUp(self):
         self.schema = Mock(spec=GraphSchema)
-        self.schema.base_nodes = {"tag": "label"}
-        self.schema.base_relationships = {"tag": "type"}
+        self.schema.base_nodes = {
+            "chemical_equation": "ChemicalEquation",
+            "molecule": "Molecule",
+        }
+        self.schema.extra_nodes = {"extra_node": "ExtraNode"}
         self.config = PreprocessorConfig(
-            input_file="test.csv",
             output_folder="/output",
             tmp_folder="/tmp",
             validation=True,
@@ -155,6 +209,47 @@ class TestPandasRowPreprocessor(unittest.TestCase):
         self.assertEqual(self.preprocessor.schema, self.schema)
         self.assertEqual(self.preprocessor.config, self.config)
 
+    def test_validate_header_valid(self):
+        header = ["ChemicalEquation.smiles", "ExtraNode.uid", "ChemicalEquation.name"]
+        # This should not raise an exception
+        self.preprocessor._validate_the_header(header)
+
+    def test_validate_header_empty(self):
+        header = []
+        # This should not raise an exception
+        with self.assertRaises(EmptyHeaderError):
+            self.preprocessor._validate_the_header(header)
+
+    def test_validate_header_missing_chemical_equation(self):
+        header = ["ExtraNode.uid", "ChemicalEquation.name"]
+        with self.assertRaises(NoChemicalStringError):
+            self.preprocessor._validate_the_header(header)
+
+    def test_validate_header_missing_extra_node_uid(self):
+        header = ["ChemicalEquation.smiles", "ExtraNode.name"]
+        with self.assertRaises(MissingUIDError):
+            self.preprocessor._validate_the_header(header)
+
+    def test_validate_header_ignore_molecule_node(self):
+        header = ["ChemicalEquation.smiles", "ExtraNode.uid", "Molecule.smiles"]
+        with patch(
+            "noctis.data_transformation.preprocessing.data_preprocessing.logger.warning"
+        ) as mock_warning:
+            self.preprocessor._validate_the_header(header)
+        mock_warning.assert_called_with(
+            "MoleculeNodeWarning: Field 'Molecule.smiles' will be ignored. Molecule nodes are reconstructed from 'ChemicalEquation' nodes."
+        )
+
+    def test_validate_header_ignore_invalid_node(self):
+        header = ["ChemicalEquation.smiles", "ExtraNode.uid", "InvalidNode.property"]
+        with patch(
+            "noctis.data_transformation.preprocessing.data_preprocessing.logger.warning"
+        ) as mock_warning:
+            self.preprocessor._validate_the_header(header)
+        mock_warning.assert_called_with(
+            "FieldNotInSchemaWarning: Field 'InvalidNode.property' will be ignored during processing. Node 'InvalidNode' is not in the schema."
+        )
+
     @patch("noctis.data_transformation.preprocessing.data_preprocessing.GraphExpander")
     def test_process_row(self, MockGraphExpander):
         # Prepare test data
@@ -169,17 +264,21 @@ class TestPandasRowPreprocessor(unittest.TestCase):
 
         # Set up the mock for GraphExpander
         mock_expander_instance = MockGraphExpander.return_value
-        mock_expander_instance.expand_from_csv = Mock(
+        mock_expander_instance.expand_reaction_step = Mock(
             return_value=({"node1": {"attr1": "val1"}}, {"rel1": {"attr2": "val2"}})
         )
 
         # Call the method
-        result_nodes, result_relationships = self.preprocessor._process_row(row)
+        (
+            result_nodes,
+            result_relationships,
+            failed_string,
+        ) = self.preprocessor._process_row(row)
 
         # Assert the mocks were called correctly
         self.preprocessor._split_row_by_node_types.assert_called_once_with(row)
         MockGraphExpander.assert_called_once_with(self.schema)
-        mock_expander_instance.expand_from_csv.assert_called_once_with(
+        mock_expander_instance.expand_reaction_step.assert_called_once_with(
             {"split": "row"},
             self.config.inp_chem_format,
             self.config.out_chem_format,
@@ -241,7 +340,6 @@ class TestCSVPreprocessor(unittest.TestCase):
         self.schema.base_nodes = {"tag": "label"}
         self.schema.base_relationships = {"tag": "type"}
         self.config = PreprocessorConfig(
-            input_file="test.csv",
             output_folder="/output",
             tmp_folder="/tmp",
             validation=True,
@@ -253,24 +351,43 @@ class TestCSVPreprocessor(unittest.TestCase):
             out_chem_format="smiles",
         )
         self.preprocessor = CSVPreprocessor(self.schema, self.config)
+        self.input_file = "test.csv"
 
     def test_init(self):
         self.assertEqual(self.preprocessor.schema, self.schema)
         self.assertEqual(self.preprocessor.config, self.config)
 
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="header1,header2\nvalue1,value2",
+    )
+    @patch.object(CSVPreprocessor, "_validate_the_header")
     @patch.object(CSVPreprocessor, "_run_parallel")
     @patch.object(CSVPreprocessor, "_run_serial")
-    def test_run_parallel(self, mock_run_serial, mock_run_parallel):
+    def test_run_parallel(
+        self, mock_run_serial, mock_run_parallel, mock_validate_header, mock_file
+    ):
         self.config.parallel = True
-        self.preprocessor.run()
+        self.preprocessor.run(self.input_file)
+        mock_validate_header.assert_called_once()
         mock_run_parallel.assert_called_once()
         mock_run_serial.assert_not_called()
 
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data="header1,header2\nvalue1,value2",
+    )
+    @patch.object(CSVPreprocessor, "_validate_the_header")
     @patch.object(CSVPreprocessor, "_run_parallel")
     @patch.object(CSVPreprocessor, "_run_serial")
-    def test_run_serial(self, mock_run_serial, mock_run_parallel):
+    def test_run_serial(
+        self, mock_run_serial, mock_run_parallel, mock_validate_header, mock_file
+    ):
         self.config.parallel = False
-        self.preprocessor.run()
+        self.preprocessor.run(self.input_file)
+        mock_validate_header.assert_called_once()
         mock_run_serial.assert_called_once()
         mock_run_parallel.assert_not_called()
 
@@ -288,7 +405,7 @@ class TestCSVPreprocessor(unittest.TestCase):
 
         mock_client.assert_called_once()
         mock_read_csv.assert_called_once_with(
-            self.config.input_file, blocksize=self.config.blocksize
+            self.preprocessor.input_file, blocksize=self.config.blocksize
         )
         mock_ddf.map_partitions.assert_called_once()
         mock_ddf.map_partitions.return_value.compute.assert_called_once()
@@ -314,7 +431,7 @@ class TestCSVPreprocessor(unittest.TestCase):
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], mock_df)
-        mock_read_csv.assert_called_once_with(self.config.input_file)
+        mock_read_csv.assert_called_once_with(self.preprocessor.input_file)
 
     @patch("pandas.read_csv")
     def test_serial_partition_generator_with_chunksize(self, mock_read_csv):
@@ -327,7 +444,7 @@ class TestCSVPreprocessor(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result, [mock_df1, mock_df2])
         mock_read_csv.assert_called_once_with(
-            self.config.input_file, chunksize=self.config.chunksize
+            self.preprocessor.input_file, chunksize=self.config.chunksize
         )
 
     @patch(
@@ -348,20 +465,18 @@ class TestCSVPreprocessor(unittest.TestCase):
         mock_partition_data = pd.DataFrame(
             {"header1": ["value1"], "header2": ["value2"]}
         )
-        mock_styler_relationships.side_effect = [
-            Mock(),
-            Mock(),
-        ]
-        mock_styler_nodes.side_effect = [
-            Mock(),
-            Mock(),
-        ]
-        # One for nodes, one for relationships
+        mock_styler_relationships.side_effect = [Mock(), Mock()]
+        mock_styler_nodes.side_effect = [Mock(), Mock()]
 
         # Mock the _process_row method
         mock_nodes = {"node1": {"attr1": "value1"}}
         mock_relationships = {"rel1": {"attr2": "value2"}}
-        mock_process_row = Mock(return_value=(mock_nodes, mock_relationships))
+        mock_process_row = Mock(
+            side_effect=[
+                (mock_nodes, mock_relationships, None),  # Successful processing
+                ({}, {}, "wrong_smiles"),  # Failed processing
+            ]
+        )
 
         with patch.object(self.preprocessor, "_process_row", mock_process_row):
             self.preprocessor._process_partition(mock_partition_data, 0)
@@ -376,13 +491,57 @@ class TestCSVPreprocessor(unittest.TestCase):
         self.assertEqual(
             mock_update.call_count, 2
         )  # Called for both nodes and relationships
-        self.assertEqual(
-            mock_styler_relationships.call_count, 1
-        )  # Called for both nodes and relationships
-        self.assertEqual(
-            mock_styler_nodes.call_count, 1
-        )  # Called for both nodes and relationships
+        self.assertEqual(mock_styler_relationships.call_count, 1)
+        self.assertEqual(mock_styler_nodes.call_count, 1)
         mock_save.assert_called_once()
+
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing._save_dataframes_to_partition_csv"
+    )
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing._save_list_to_partition_csv"
+    )
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing.Neo4jImportStyle.export_nodes"
+    )
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing.Neo4jImportStyle.export_relationships"
+    )
+    def test_process_partition_with_failed_strings(
+        self,
+        mock_export_relationships,
+        mock_export_nodes,
+        mock_save_list,
+        mock_save_dataframes,
+    ):
+        df = pd.DataFrame(
+            {
+                "ChemicalEquation.smiles": ["CCO>>CC(=O)O", "InvalidSmiles", "C=C>>CC"],
+                "ChemicalEquation.name": ["Reaction1", "Reaction2", "Reaction3"],
+            }
+        )
+
+        mock_process_row = Mock(
+            side_effect=[
+                ({"Node1": [Mock()]}, {"Rel1": [Mock()]}, None),
+                ({}, {}, "InvalidSmiles"),
+                ({"Node2": [Mock()]}, {"Rel2": [Mock()]}, None),
+            ]
+        )
+
+        with patch.object(self.preprocessor, "_process_row", mock_process_row):
+            self.preprocessor._process_partition(df, 0)
+
+        mock_save_list.assert_called_once_with(
+            ["InvalidSmiles"],
+            header="smiles",
+            output_dir=self.config.tmp_folder,
+            name="failed_strings",
+            partition_num=0,
+        )
+        mock_save_dataframes.assert_called_once()
+        mock_export_nodes.assert_called_once()
+        mock_export_relationships.assert_called_once()
 
 
 class TestPythonObjectPreprocessorInterface(unittest.TestCase):
@@ -456,12 +615,29 @@ class TestDataFramePreprocessor(unittest.TestCase):
     @patch(
         "noctis.data_transformation.preprocessing.data_preprocessing.create_data_container"
     )
-    def test_run_empty_dataframe(self, mock_create_data_container):
-        df = pd.DataFrame()
-        result = self.preprocessor.run(df)
+    def test_run_with_failed_strings(self, mock_create_data_container):
+        df = pd.DataFrame(
+            {
+                "ChemicalEquation.smiles": ["CCO>>CC(=O)O", "InvalidSmiles", "C=C>>CC"],
+                "ChemicalEquation.name": ["Reaction1", "Reaction2", "Reaction3"],
+            }
+        )
 
-        mock_create_data_container.assert_called_once_with([], [])
-        self.assertEqual(result, mock_create_data_container.return_value)
+        mock_process_row = Mock(
+            side_effect=[
+                ({"Node1": [Mock()]}, {"Rel1": [Mock()]}, None),
+                ({}, {}, "InvalidSmiles"),
+                ({"Node2": [Mock()]}, {"Rel2": [Mock()]}, None),
+            ]
+        )
+
+        with patch.object(self.preprocessor, "_process_row", mock_process_row):
+            with patch.object(self.preprocessor, "_validate_the_header"):
+                result = self.preprocessor.run(df)
+
+        self.assertEqual(len(self.preprocessor.failed_strings), 1)
+        self.assertEqual(self.preprocessor.failed_strings[0], "InvalidSmiles")
+        mock_create_data_container.assert_called_once()
 
     @patch(
         "noctis.data_transformation.preprocessing.data_preprocessing.create_data_container"
@@ -474,10 +650,14 @@ class TestDataFramePreprocessor(unittest.TestCase):
         with patch.object(
             self.preprocessor,
             "_process_row",
-            return_value=(mock_nodes, mock_relationships),
+            return_value=(mock_nodes, mock_relationships, None),
         ):
-            result = self.preprocessor.run(df)
+            with patch.object(
+                self.preprocessor, "_validate_the_header"
+            ) as mock_validate_header:
+                result = self.preprocessor.run(df)
 
+        mock_validate_header.assert_called_once_with(["col1", "col2"])
         mock_create_data_container.assert_called_once_with(
             [mock_nodes["Node1"][0]], [mock_relationships["Rel1"][0]]
         )
@@ -500,12 +680,16 @@ class TestDataFramePreprocessor(unittest.TestCase):
             self.preprocessor,
             "_process_row",
             side_effect=[
-                (mock_nodes1, mock_relationships1),
-                (mock_nodes2, mock_relationships2),
+                (mock_nodes1, mock_relationships1, None),
+                (mock_nodes2, mock_relationships2, None),
             ],
         ):
-            result = self.preprocessor.run(df)
+            with patch.object(
+                self.preprocessor, "_validate_the_header"
+            ) as mock_validate_header:
+                result = self.preprocessor.run(df)
 
+        mock_validate_header.assert_called_once_with(["col1", "col2"])
         expected_nodes = [
             mock_nodes1["Node1"][0],
             mock_nodes1["Node2"][0],
@@ -541,10 +725,12 @@ class TestDataFramePreprocessor(unittest.TestCase):
         mock_process_row_return1 = (
             {"Molecule": [mock_node1], "Reaction": [mock_node2]},
             {"PARTICIPATES_IN": [mock_rel1]},
+            None,
         )
         mock_process_row_return2 = (
             {"Molecule": [mock_node3], "Reaction": [mock_node4]},
             {"PARTICIPATES_IN": [mock_rel2]},
+            None,
         )
 
         with patch.object(
@@ -552,10 +738,18 @@ class TestDataFramePreprocessor(unittest.TestCase):
             "_process_row",
             side_effect=[mock_process_row_return1, mock_process_row_return2],
         ):
-            with patch(
-                "noctis.data_transformation.preprocessing.data_preprocessing.create_data_container"
-            ) as mock_create_data_container:
-                result = self.preprocessor.run(df)
+            with patch.object(
+                self.preprocessor, "_validate_the_header"
+            ) as mock_validate_header:
+                with patch(
+                    "noctis.data_transformation.preprocessing.data_preprocessing.create_data_container"
+                ) as mock_create_data_container:
+                    result = self.preprocessor.run(df)
+
+            # Assert that _validate_the_header was called once with the correct headers
+        mock_validate_header.assert_called_once_with(
+            ["Molecule.uid", "Molecule.smiles", "Reaction.uid", "Reaction.name"]
+        )
 
         mock_create_data_container.assert_called_once_with(
             [mock_node1, mock_node2, mock_node3, mock_node4], [mock_rel1, mock_rel2]
@@ -601,7 +795,10 @@ class TestChemicalStringPreprocessorBase(unittest.TestCase):
         }
 
         mock_expander = MockGraphExpander.return_value
-        mock_expander.expand_from_csv.return_value = (mock_nodes, mock_relationships)
+        mock_expander.expand_reaction_step.return_value = (
+            mock_nodes,
+            mock_relationships,
+        )
 
         mock_dict_to_list.side_effect = [
             [
@@ -623,12 +820,14 @@ class TestChemicalStringPreprocessorBase(unittest.TestCase):
             ],
         ]
 
-        nodes, relationships = self.preprocessor._process_reaction_string(
-            reaction_string
-        )
+        (
+            nodes,
+            relationships,
+            failed_string,
+        ) = self.preprocessor._process_reaction_string(reaction_string)
 
         MockGraphExpander.assert_called_once_with(self.schema)
-        mock_expander.expand_from_csv.assert_called_once_with(
+        mock_expander.expand_reaction_step.assert_called_once_with(
             {"ChemicalEquation": {"properties": {"smiles": "CCO>>CC(=O)O"}}},
             self.config.inp_chem_format,
             self.config.out_chem_format,
@@ -680,6 +879,7 @@ class TestReactionStringsPreprocessor(unittest.TestCase):
                         relationship_type="CONTAINS",
                     )
                 ],
+                None,
             ),
             (
                 [
@@ -693,6 +893,7 @@ class TestReactionStringsPreprocessor(unittest.TestCase):
                         relationship_type="CONTAINS",
                     )
                 ],
+                None,
             ),
         ]
 
@@ -779,6 +980,7 @@ class TestSynGraphPreprocessor(unittest.TestCase):
                         relationship_type="CONTAINS",
                     )
                 ],
+                None,
             ),
             (
                 [
@@ -792,6 +994,7 @@ class TestSynGraphPreprocessor(unittest.TestCase):
                         relationship_type="CONTAINS",
                     )
                 ],
+                None,
             ),
             (
                 [
@@ -805,6 +1008,7 @@ class TestSynGraphPreprocessor(unittest.TestCase):
                         relationship_type="CONTAINS",
                     )
                 ],
+                None,
             ),
         ]
 
@@ -868,7 +1072,7 @@ class TestSynGraphPreprocessor(unittest.TestCase):
             with patch.object(
                 self.preprocessor, "_process_reaction_string"
             ) as mock_process:
-                mock_process.return_value = ([], [])
+                mock_process.return_value = ([], [], None)
                 with patch(
                     "noctis.data_transformation.preprocessing.data_preprocessing.create_data_container"
                 ) as mock_create:
@@ -954,7 +1158,6 @@ class TestEndToEnd(unittest.TestCase):
             }
         )
         self.config = PreprocessorConfig(
-            input_file="test.csv",
             output_folder="output",
             tmp_folder="tmp",
             validation=False,
@@ -967,15 +1170,17 @@ class TestEndToEnd(unittest.TestCase):
         )
         self.preprocessor = CSVPreprocessor(self.schema, self.config)
 
+        self.input_file = ("test.csv",)
+
     def test_end_to_end_process_partition(self):
         # Create sample input dataframe
         data_dict = {
-            "ChemicalEquation.smiles": ["C>>O"],
-            "ChemicalEquation.uid": ["C123"],
-            "ChemicalEquation.random_property": ["hello"],
-            "Extra1.uid": ["ID123"],
-            "Extra1.value": ["DOGE"],
-            "Extra2.uid": ["N123"],
+            "ChemicalEquation.smiles": ["C>>O", "WrongSmiles"],
+            "ChemicalEquation.uid": ["C123", "a"],
+            "ChemicalEquation.random_property": ["hello", "a"],
+            "Extra1.uid": ["ID123", "a"],
+            "Extra1.value": ["DOGE", "a"],
+            "Extra2.uid": ["N123", "a"],
         }
         input_df = pd.DataFrame(data_dict)
 

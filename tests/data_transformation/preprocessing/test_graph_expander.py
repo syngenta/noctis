@@ -91,7 +91,7 @@ class TestGraphExpander(unittest.TestCase):
         }
 
         # Act
-        nodes, relationships = self.graph_expander.expand_from_csv(
+        nodes, relationships = self.graph_expander.expand_reaction_step(
             step_dict, "smiles", "smarts", True
         )
 
@@ -152,7 +152,7 @@ class TestGraphExpander(unittest.TestCase):
         }
 
         # Act
-        nodes, relationships = self.graph_expander.expand_from_csv(
+        nodes, relationships = self.graph_expander.expand_reaction_step(
             step_dict, "smiles", "smarts", False
         )
 
@@ -340,7 +340,7 @@ class TestGraphExpander(unittest.TestCase):
         }
 
         # Execute
-        self.graph_expander.expand_from_csv(step_dict, "smiles", "smarts", False)
+        self.graph_expander.expand_reaction_step(step_dict, "smiles", "smarts", False)
 
         # Assert
         mock_logger.warning.assert_any_call(
