@@ -4,6 +4,7 @@ from neo4j import GraphDatabase, Session, Driver
 from neo4j.exceptions import Neo4jError
 from noctis.repository.neo4j.neo4j_repository import Neo4jRepository
 from noctis.repository.neo4j.neo4j_queries import Neo4jQueryRegistry, AbstractQuery
+import pandas as pd
 
 
 @pytest.fixture
@@ -172,6 +173,10 @@ def test_query_strategies(neo4j_repository, strategy_name):
     mock_tx = Mock()
     mock_query = Mock(spec=AbstractQuery)
     mock_result = Mock()  # This will simulate the neo4j.Result object
+    mock_df = pd.DataFrame({"column": [1, 2, 3]})  # Mock DataFrame
+
+    # Set up mock_result.to_df() to return the mock DataFrame
+    mock_result.to_df.return_value = mock_df
 
     with patch.object(
         neo4j_repository, "_execute_query", return_value=mock_result
@@ -188,8 +193,10 @@ def test_query_strategies(neo4j_repository, strategy_name):
         else:
             strategy = getattr(neo4j_repository, strategy_name)
             result = strategy(mock_tx, mock_query, param1="value1")
+            assert isinstance(result, pd.DataFrame)
+            pd.testing.assert_frame_equal(result, mock_df)
 
     mock_execute_query.assert_called_once_with(mock_tx, mock_query, param1="value1")
 
     if strategy_name != "_retrieve_graph_strategy":
-        assert result == mock_result
+        mock_result.to_df.assert_called_once()

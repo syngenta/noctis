@@ -1,13 +1,17 @@
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from typing import Optional, Type, Callable
+from typing import Optional, Type, Callable, Union
 
 from neo4j import Driver, GraphDatabase, Session
 from neo4j.exceptions import Neo4jError
 
 from noctis.data_architecture.datamodel import DataContainer
 from noctis.data_transformation.neo4j.neo4j_formatter import format_result
-from noctis.repository.neo4j.neo4j_queries import AbstractQuery, Neo4jQueryRegistry
+from noctis.repository.neo4j.neo4j_queries import (
+    AbstractQuery,
+    Neo4jQueryRegistry,
+    CustomQuery,
+)
 
 
 class Neo4jRepository:
@@ -54,14 +58,19 @@ class Neo4jRepository:
             for query in query().get_query():
                 session.run(query)
 
-    def execute_custom_query_from_json(self, query_name: str):
-        pass
-
-    def execute_custom_query(self):
-        pass
+    def execute_custom_query_from_yaml(
+        self, yaml_file: str, query_name: str, **kwargs: any
+    ):
+        query = CustomQuery.from_yaml(yaml_file=yaml_file, query_name=query_name)
+        return self._build_query_execution_strategy(query, **kwargs)
 
     def execute_query(self, query_name: str, **kwargs: any):
         query = Neo4jQueryRegistry.get_query_object(query_name)
+        return self._build_query_execution_strategy(query, **kwargs)
+
+    def _build_query_execution_strategy(
+        self, query: Union[Type[AbstractQuery], CustomQuery], **kwargs: any
+    ):
         query_type = query.query_type
         strategy, transaction_function = self._query_strategies.get(
             query_type, (None, None)
@@ -120,10 +129,10 @@ class Neo4jRepository:
         self, tx, query: Type[AbstractQuery], **kwargs: any
     ) -> any:
         result = self._execute_query(tx, query, **kwargs)
-        return result
+        return result.to_df()
 
     def _retrieve_stats_strategy(
         self, tx, query: Type[AbstractQuery], **kwargs: any
     ) -> any:
         result = self._execute_query(tx, query, **kwargs)
-        return result
+        return result.to_df()

@@ -6,6 +6,11 @@ from noctis.repository.neo4j.neo4j_queries import (
     AbstractQuery,
 )
 
+from pydantic import ValidationError
+from noctis.repository.neo4j.neo4j_queries import CustomQuery
+import tempfile
+import os
+
 
 class TestAbstractQuery(unittest.TestCase):
     def setUp(self):
@@ -170,3 +175,147 @@ class TestNeo4jQueryRegistry(unittest.TestCase):
 
         expected = {"test_query1", "test_query2"}
         self.assertEqual(Neo4jQueryRegistry.get_all_queries(), expected)
+
+
+class TestCustomQuery(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Sample YAML content for testing
+        cls.SAMPLE_YAML = """
+        - version: 1.0
+        - date: 2024-12-04
+
+        - query_name: get_tree
+          query_type: retrieve_graph
+          is_parameterized: false
+          query_args_required:
+            - root_node_uid
+          query_args_optional:
+            - max_level
+          query: |
+            MATCH (start {uid:$root_node_uid})
+            CALL apoc.path.subgraphAll(start, {
+              relationshipFilter: '<PRODUCT,<REACTANT',
+              minLevel: 0,
+              maxLevel: $max_level
+            })
+            YIELD nodes, relationships
+            RETURN nodes, relationships
+
+        - query_name: get_node_by_id
+          query_type: retrieve_graph
+          is_parameterized: false
+          query_args_required:
+            - node_id
+          query: |
+            MATCH (n:Node {id: $node_id})
+            RETURN n
+        """
+        # Create a temporary YAML file
+        cls.temp_dir = tempfile.mkdtemp()
+        cls.yaml_file = os.path.join(cls.temp_dir, "test_queries.yaml")
+        with open(cls.yaml_file, "w") as f:
+            f.write(cls.SAMPLE_YAML)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Clean up the temporary file
+        os.remove(cls.yaml_file)
+        os.rmdir(cls.temp_dir)
+
+    def test_custom_query_creation(self):
+        query = CustomQuery(
+            query_name="test",
+            query_type="retrieve_graph",
+            query="MATCH (n) RETURN n",
+            query_args_required=["arg1"],
+            query_args_optional=["arg2"],
+        )
+        self.assertEqual(query.query_name, "test")
+        self.assertEqual(query.query_type, "retrieve_graph")
+        self.assertEqual(query.query, "MATCH (n) RETURN n")
+        self.assertEqual(query.query_args_required, ["arg1"])
+        self.assertEqual(query.query_args_optional, ["arg2"])
+
+    def test_custom_query_validation(self):
+        with self.assertRaises(ValidationError):
+            CustomQuery(query_name="test", query=123)  # Invalid query type
+
+    def test_build_from_dict(self):
+        query_dict = {
+            "query_name": "test",
+            "query_type": "retrieve_graph",
+            "query": "MATCH (n) RETURN n",
+            "query_args_required": ["arg1"],
+        }
+        query = CustomQuery.build_from_dict(query_dict)
+        self.assertEqual(query.query_name, "test")
+        self.assertEqual(query.query_type, "retrieve_graph")
+        self.assertEqual(query.query, "MATCH (n) RETURN n")
+        self.assertEqual(query.query_args_required, ["arg1"])
+
+    def test_from_yaml(self):
+        query = CustomQuery.from_yaml(self.yaml_file, "get_tree")
+        self.assertEqual(query.query_name, "get_tree")
+        self.assertEqual(query.query_type, "retrieve_graph")
+        self.assertIn("MATCH (start {uid:$root_node_uid})", query.query)
+        self.assertEqual(query.query_args_required, ["root_node_uid"])
+        self.assertEqual(query.query_args_optional, ["max_level"])
+
+    def test_from_yaml_not_found(self):
+        with self.assertRaises(ValueError) as context:
+            CustomQuery.from_yaml(self.yaml_file, "non_existent")
+        self.assertIn(
+            "Query 'non_existent' not found in the YAML file", str(context.exception)
+        )
+
+    def test_get_query(self):
+        query = CustomQuery.from_yaml(self.yaml_file, "get_node_by_id")
+        self.assertIn("MATCH (n:Node {id: $node_id})", query.get_query())
+
+    def test_list_queries(self):
+        queries = CustomQuery.list_queries(self.yaml_file)
+        self.assertEqual(set(queries), {"get_tree", "get_node_by_id"})
+
+    def test_validate_query_kwargs(self):
+        query = CustomQuery.from_yaml(self.yaml_file, "get_tree")
+
+        # Valid args
+        query.validate_query_kwargs({"root_node_uid": "value", "max_level": 3})
+
+        # Missing required arg
+        with self.assertRaises(ValueError) as context:
+            query.validate_query_kwargs({"max_level": 3})
+        self.assertIn(
+            "Missing required arguments: root_node_uid", str(context.exception)
+        )
+
+        # Invalid arg
+        with self.assertRaises(ValueError) as context:
+            query.validate_query_kwargs(
+                {"root_node_uid": "value", "invalid_arg": "value"}
+            )
+        self.assertIn("Invalid arguments provided: invalid_arg", str(context.exception))
+
+    def test_call_method(self):
+        query = CustomQuery.from_yaml(self.yaml_file, "get_node_by_id")
+
+        result = query(node_id="123")
+        self.assertIsInstance(result, CustomQuery)
+
+        with self.assertRaises(ValueError):
+            query(invalid_arg="value")  # Invalid arg
+
+    def test_query_as_string(self):
+        query = CustomQuery.from_yaml(self.yaml_file, "get_node_by_id")
+        self.assertIsInstance(query.query, str)
+        self.assertIn("MATCH (n:Node {id: $node_id})", query.query)
+
+    def test_query_invalid_structure(self):
+        with self.assertRaises(ValidationError):
+            CustomQuery(
+                query_name="test",
+                query_type="retrieve_graph",
+                query=[1, 2, 3],  # Invalid: not a string or list of strings
+                query_args_required=["arg1"],
+            )

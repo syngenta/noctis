@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import ClassVar, Type, Union
+from typing import ClassVar, Type, Union, Optional
 
 import pandas as pd
 from linchemin.cgu.syngraph import SynGraph
@@ -22,14 +22,11 @@ from noctis.repository.neo4j.neo4j_functions import (
     _get_dict_keys_from_csv,
 )
 
-"""
-Mental note about Custom Query:
+import yaml
 
-repo = Repository(..)
-repo.run_custom_query_from_json('name.json', query_name = 'custom_n_5')
-repo.run_custom_query(query = {}, query_name = None)
+from noctis.utilities import console_logger
 
-"""
+logger = console_logger(__name__)
 
 
 class QueryAlreadyExists(Exception):
@@ -430,3 +427,91 @@ class DeleteChemicalEquationNodes(AbstractQuery):
         f"where molCount > $max_relationships "
         f"detach delete c "
     )
+
+
+class CustomQuery(BaseModel):
+    """Custom query class for executing queries from YAML files"""
+
+    query_name: str
+    query_type: str = Field(default="retrieve_stats")
+    is_parameterized: ClassVar[bool] = False
+    query: Union[str, list[str]]
+    query_args_required: list[str] = Field(default_factory=list)
+    query_args_optional: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_query_structure(cls, values: dict[str, any]) -> dict[str, any]:
+        query = values.get("query")
+        if isinstance(query, str):
+            return values
+        elif isinstance(query, list) and all(isinstance(item, str) for item in query):
+            return values
+        else:
+            raise ValueError("Query must be either a string or a list of strings")
+
+    @classmethod
+    def build_from_dict(cls, query_dict: dict) -> "CustomQuery":
+        """Build a CustomQuery instance from a dictionary"""
+        if query_dict.get("is_parameterized") is True:
+            logger.warning(
+                f"'is_parameterized' is set to True, but it will be ignored and set to False."
+            )
+            query_dict["is_parameterized"] = False
+        return cls(**query_dict)
+
+    @classmethod
+    def from_yaml(cls, yaml_file: str, query_name: str) -> "CustomQuery":
+        """Load a specific query from a YAML file"""
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
+
+        queries = [
+            item for item in data if isinstance(item, dict) and "query_name" in item
+        ]
+        query_dict = next(
+            (q for q in queries if q.get("query_name") == query_name), None
+        )
+        if not query_dict:
+            raise ValueError(f"Query '{query_name}' not found in the YAML file")
+
+        return cls.build_from_dict(query_dict)
+
+    def get_query(self) -> Union[str, list[str]]:
+        return self.query
+
+    @classmethod
+    def list_queries(cls, yaml_file: str) -> list[str]:
+        """List all query names available in the YAML file"""
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
+
+        return [
+            item["query_name"]
+            for item in data
+            if isinstance(item, dict) and "query_name" in item
+        ]
+
+    def validate_query_kwargs(self, kwargs: dict[str, any]) -> None:
+        """Validate the query arguments"""
+        missing_required_args = [
+            arg for arg in self.query_args_required if arg not in kwargs
+        ]
+        if missing_required_args:
+            raise ValueError(
+                f"Missing required arguments: {', '.join(missing_required_args)}"
+            )
+
+        invalid_args = [
+            arg
+            for arg in kwargs
+            if arg not in self.query_args_required
+            and arg not in self.query_args_optional
+        ]
+        if invalid_args:
+            raise ValueError(f"Invalid arguments provided: {', '.join(invalid_args)}")
+
+    def __call__(self, **kwargs: any) -> any:
+        """Make the CustomQuery instance callable"""
+        self.validate_query_kwargs(kwargs)
+        return self
