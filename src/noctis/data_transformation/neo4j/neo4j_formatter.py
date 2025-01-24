@@ -106,16 +106,9 @@ class Neo4jResultFormatter:
         )
 
 
-def select_formatter(result):
-    if isinstance(result, Result):
-        return Neo4jResultFormatter()
-    else:
-        raise ValueError("Unsupported result class")
-
-
-def format_result(result):
+def format_result(result: Union[list[Record], Result]):
     # print("Formatting started")
-    formatter = select_formatter(result)
+    formatter = Neo4jResultFormatter()
     formatted_result = DataContainer()
     for record in result:
         nodes, relationships = formatter.extract_nodes_and_relationships(record)

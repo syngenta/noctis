@@ -2,7 +2,6 @@ import unittest
 from unittest.mock import Mock, patch
 from noctis.data_transformation.neo4j.neo4j_formatter import (
     Neo4jResultFormatter,
-    select_formatter,
     format_result,
     Node,
     Relationship,
@@ -212,21 +211,9 @@ class TestNeo4jResultFormatter(unittest.TestCase):
         self.assertEqual(result.end_node.uid, "T2")
 
 
-class TestSelectFormatter(unittest.TestCase):
-    def test_select_formatter_with_neo4j_result(self):
-        result = Mock(spec=Result)
-        formatter = select_formatter(result)
-        self.assertIsInstance(formatter, Neo4jResultFormatter)
-
-    def test_select_formatter_with_unsupported_result(self):
-        result = object()  # Creating an unsupported result object
-        with self.assertRaises(ValueError):
-            select_formatter(result)
-
-
 class TestFormatResult(unittest.TestCase):
-    @patch("noctis.data_transformation.neo4j.neo4j_formatter.select_formatter")
-    def test_format_result(self, mock_select_formatter):
+    @patch("noctis.data_transformation.neo4j.neo4j_formatter.Neo4jResultFormatter")
+    def test_format_result(self, mock_neo4j_formatter):
         # Create a mock formatter
         mock_formatter = Mock()
 
@@ -242,7 +229,7 @@ class TestFormatResult(unittest.TestCase):
             ],
         )
 
-        mock_select_formatter.return_value = mock_formatter
+        mock_neo4j_formatter.return_value = mock_formatter
 
         mock_result = [Mock(), Mock()]
 

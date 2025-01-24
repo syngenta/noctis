@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+import pandas as pd
 from contextlib import contextmanager
 from typing import Optional, Type, Callable, Union
 
 from neo4j import Driver, GraphDatabase, Session
 from neo4j.exceptions import Neo4jError
+from pandas.core.interchange.dataframe_protocol import DataFrame
 
 from noctis.data_architecture.datamodel import DataContainer
 from noctis.data_transformation.neo4j.neo4j_formatter import format_result
@@ -12,6 +14,8 @@ from noctis.repository.neo4j.neo4j_queries import (
     Neo4jQueryRegistry,
     CustomQuery,
 )
+
+from neo4j import Result, Record
 
 
 class Neo4jRepository:
@@ -93,46 +97,46 @@ class Neo4jRepository:
     ) -> any:
         return session.execute_write(lambda tx: strategy(tx, query, **kwargs))
 
-    def _execute_query(self, tx, query: Type[AbstractQuery], **kwargs: any) -> any:
+    def _execute_query(
+        self, tx, query: Type[AbstractQuery], **kwargs: any
+    ) -> Union[Result, list[Record]]:
         query_object = query(**kwargs)
         query_string = query_object.get_query()
-        executor = (
-            self._execute_parametrized_query
-            if query.is_parameterized
-            else self._execute_non_parametrized_query
-        )
-        return executor(tx, query_string, **kwargs)
+        if query.is_parameterized:
+            return self._execute_parametrized_query(tx, query_string)
+        else:
+            return self._execute_non_parametrized_query(tx, query_string, **kwargs)
 
     @staticmethod
-    def _execute_non_parametrized_query(tx, query: str, **kwargs: any) -> any:
+    def _execute_non_parametrized_query(tx, query: str, **kwargs: any) -> Result:
         """To execute a query whose arguments need to be passed at run time"""
         result = tx.run(query, **kwargs)
         # print("Query is done. Now formatting")
         return result
 
     @staticmethod
-    def _execute_parametrized_query(tx, query: list[str]) -> any:
+    def _execute_parametrized_query(tx, query: list[str]) -> list[Record]:
         """To execute a query whose arguments are embedded in the query string"""
         results = []
         for line in query:
             result = tx.run(line)
-            results.append(result.single())
+            results.extend(result.to_eager_result().records)
         return results
 
     def _retrieve_graph_strategy(
         self, tx, query: Type[AbstractQuery], **kwargs: any
-    ) -> any:
+    ) -> DataContainer:
         result = self._execute_query(tx, query, **kwargs)
         return format_result(result)
 
     def _modify_graph_strategy(
         self, tx, query: Type[AbstractQuery], **kwargs: any
-    ) -> any:
+    ) -> list:
         result = self._execute_query(tx, query, **kwargs)
-        return result.to_df()
+        return [record for record in result]
 
     def _retrieve_stats_strategy(
         self, tx, query: Type[AbstractQuery], **kwargs: any
-    ) -> any:
+    ) -> pd.DataFrame:
         result = self._execute_query(tx, query, **kwargs)
-        return result.to_df()
+        return pd.DataFrame([dict(record) for record in result])

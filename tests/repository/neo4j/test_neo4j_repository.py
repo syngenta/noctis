@@ -4,7 +4,9 @@ from neo4j import GraphDatabase, Session, Driver
 from neo4j.exceptions import Neo4jError
 from noctis.repository.neo4j.neo4j_repository import Neo4jRepository
 from noctis.repository.neo4j.neo4j_queries import Neo4jQueryRegistry, AbstractQuery
+from noctis.data_architecture.datamodel import DataContainer
 import pandas as pd
+from neo4j import Record
 
 
 @pytest.fixture
@@ -158,25 +160,55 @@ def test_execute_non_parametrized_query():
 
 
 def test_execute_parametrized_query():
+    # Create a mock transaction
     mock_tx = Mock()
-    mock_tx.run.return_value.single.return_value = "MOCK RESULT"
+
+    # Create mock result objects for each query
+    mock_result1 = Mock()
+    mock_result2 = Mock()
+
+    # Mock the behavior of `to_eager_result().records` for each result
+    mock_result1.to_eager_result.return_value.records = [
+        Record({"result": "MOCK RESULT"})
+    ]
+    mock_result2.to_eager_result.return_value.records = [
+        Record({"result": "MOCK RESULT"})
+    ]
+
+    # Use side_effect to return different results for each run call
+    mock_tx.run.side_effect = [mock_result1, mock_result2]
+
+    # Call the method under test
     result = Neo4jRepository._execute_parametrized_query(mock_tx, ["QUERY1", "QUERY2"])
+
+    # Check that `run` was called twice (once for each query)
     assert mock_tx.run.call_count == 2
-    assert result == ["MOCK RESULT", "MOCK RESULT"]
+
+    # Check the result
+    assert result == [
+        Record({"result": "MOCK RESULT"}),
+        Record({"result": "MOCK RESULT"}),
+    ]
 
 
 @pytest.mark.parametrize(
-    "strategy_name",
-    ["_retrieve_graph_strategy", "_modify_graph_strategy", "_retrieve_stats_strategy"],
+    "strategy_name, expected_type",
+    [
+        ("_retrieve_graph_strategy", DataContainer),
+        ("_modify_graph_strategy", list),
+        ("_retrieve_stats_strategy", pd.DataFrame),
+    ],
 )
-def test_query_strategies(neo4j_repository, strategy_name):
+def test_query_strategies(neo4j_repository, strategy_name, expected_type):
     mock_tx = Mock()
     mock_query = Mock(spec=AbstractQuery)
-    mock_result = Mock()  # This will simulate the neo4j.Result object
-    mock_df = pd.DataFrame({"column": [1, 2, 3]})  # Mock DataFrame
+    mock_result = MagicMock()  # Use MagicMock to simulate the neo4j.Result object
 
-    # Set up mock_result.to_df() to return the mock DataFrame
-    mock_result.to_df.return_value = mock_df
+    # Mock records as dictionaries
+    mock_records = [{"key": "value1"}, {"key": "value2"}, {"key": "value3"}]
+
+    # Make the mock result iterable
+    mock_result.__iter__.return_value = iter(mock_records)
 
     with patch.object(
         neo4j_repository, "_execute_query", return_value=mock_result
@@ -185,18 +217,20 @@ def test_query_strategies(neo4j_repository, strategy_name):
             with patch(
                 "noctis.repository.neo4j.neo4j_repository.format_result"
             ) as mock_format_result:
-                mock_format_result.return_value = "Formatted Result"
+                mock_format_result.return_value = DataContainer()  # Mock DataContainer
                 strategy = getattr(neo4j_repository, strategy_name)
                 result = strategy(mock_tx, mock_query, param1="value1")
                 mock_format_result.assert_called_once_with(mock_result)
-                assert result == "Formatted Result"
+                assert isinstance(result, expected_type)
         else:
             strategy = getattr(neo4j_repository, strategy_name)
             result = strategy(mock_tx, mock_query, param1="value1")
-            assert isinstance(result, pd.DataFrame)
-            pd.testing.assert_frame_equal(result, mock_df)
+            assert isinstance(result, expected_type)
 
+            if strategy_name == "_retrieve_stats_strategy":
+                # Convert mock records to DataFrame format
+                expected_df = pd.DataFrame(mock_records)
+                pd.testing.assert_frame_equal(result, expected_df)
+
+    # Ensure _execute_query is called once with the correct parameters
     mock_execute_query.assert_called_once_with(mock_tx, mock_query, param1="value1")
-
-    if strategy_name != "_retrieve_graph_strategy":
-        mock_result.to_df.assert_called_once()

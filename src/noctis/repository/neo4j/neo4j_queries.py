@@ -391,7 +391,7 @@ class ImportDbFromCsv(AbstractQuery):
             self.prefix_relationships, self.relationships_types
         )
 
-        query_import = f"""CALL apoc.import.csv([{nodes_files}],[{relationships_files}], {{delimiter:{self.delimiter}, stringIds: true,
+        query_import = f"""CALL apoc.import.csv([{nodes_files}],[{relationships_files}], {{delimiter:'{self.delimiter}', stringIds: true,
                 ignoreDuplicateNodes: true}})"""
         query_refactor_relationships = "MATCH (a)-[r]->(b)\n"
         query_refactor_relationships += "with a, b, collect(r) as rels\n"
@@ -410,8 +410,20 @@ class ImportDbFromCsv(AbstractQuery):
 
 
 @Neo4jQueryRegistry.register_query()
+class DeleteAllNodes(AbstractQuery):
+    """Query to delete ChemicalEquation nodes based on the number of a particular relationship type"""
+
+    query_name: ClassVar[str] = "remove_all_nodes"
+    query_type: ClassVar[str] = "modify_graph"
+    is_parameterized = False
+    query_args_required: ClassVar[list[str]] = []
+    query_args_optional: ClassVar[list[str]] = []
+    query: ClassVar[str] = f"MATCH (c)" f"detach delete c "
+
+
+@Neo4jQueryRegistry.register_query()
 class DeleteChemicalEquationNodes(AbstractQuery):
-    """Query to delete ChemicalEquation nodes based on the number of a particular retlationship type"""
+    """Query to delete ChemicalEquation nodes based on the number of a particular relationship type"""
 
     query_name: ClassVar[str] = "remove_ce_nodes"
     query_type: ClassVar[str] = "modify_graph"
