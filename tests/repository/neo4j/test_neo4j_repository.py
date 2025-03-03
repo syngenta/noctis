@@ -4,7 +4,7 @@ from neo4j import GraphDatabase, Session, Driver
 from neo4j.exceptions import Neo4jError
 from noctis.repository.neo4j.neo4j_repository import Neo4jRepository
 from noctis.repository.neo4j.neo4j_queries import Neo4jQueryRegistry, AbstractQuery
-from noctis.data_architecture.datamodel import DataContainer
+from noctis.data_architecture.datacontainer import DataContainer
 import pandas as pd
 from neo4j import Record
 
@@ -129,11 +129,11 @@ def test_execute_write(neo4j_repository, mock_session):
     mock_session.execute_write.assert_called_once()
 
 
-@pytest.mark.parametrize("is_parameterized", [True, False])
-def test_execute_query_method(neo4j_repository, is_parameterized):
+@pytest.mark.parametrize("parameters_embedded", [True, False])
+def test_execute_query_method(neo4j_repository, parameters_embedded):
     mock_tx = Mock()
     mock_query = Mock(spec=AbstractQuery)
-    mock_query.is_parameterized = is_parameterized
+    mock_query.parameters_embedded = parameters_embedded
     mock_query_object = Mock()
     mock_query_object.get_query.return_value = "MOCK QUERY"
     mock_query.return_value = mock_query_object
@@ -141,9 +141,9 @@ def test_execute_query_method(neo4j_repository, is_parameterized):
     with patch.object(
         neo4j_repository,
         (
-            "_execute_parametrized_query"
-            if is_parameterized
-            else "_execute_non_parametrized_query"
+            "_execute_parameters_embedded_query"
+            if parameters_embedded
+            else "_execute_parameters_not_embedded_query"
         ),
     ) as mock_executor:
         neo4j_repository._execute_query(mock_tx, mock_query, param1="value1")
@@ -153,7 +153,7 @@ def test_execute_query_method(neo4j_repository, is_parameterized):
 
 def test_execute_non_parametrized_query():
     mock_tx = Mock()
-    result = Neo4jRepository._execute_non_parametrized_query(
+    result = Neo4jRepository._execute_parameters_not_embedded_query(
         mock_tx, "MOCK QUERY", param1="value1"
     )
     mock_tx.run.assert_called_once_with("MOCK QUERY", param1="value1")
@@ -179,7 +179,9 @@ def test_execute_parametrized_query():
     mock_tx.run.side_effect = [mock_result1, mock_result2]
 
     # Call the method under test
-    result = Neo4jRepository._execute_parametrized_query(mock_tx, ["QUERY1", "QUERY2"])
+    result = Neo4jRepository._execute_parameters_embedded_query(
+        mock_tx, ["QUERY1", "QUERY2"]
+    )
 
     # Check that `run` was called twice (once for each query)
     assert mock_tx.run.call_count == 2
@@ -220,7 +222,9 @@ def test_query_strategies(neo4j_repository, strategy_name, expected_type):
                 mock_format_result.return_value = DataContainer()  # Mock DataContainer
                 strategy = getattr(neo4j_repository, strategy_name)
                 result = strategy(mock_tx, mock_query, param1="value1")
-                mock_format_result.assert_called_once_with(mock_result)
+                mock_format_result.assert_called_once_with(
+                    mock_result, "ChemicalEquation"
+                )
                 assert isinstance(result, expected_type)
         else:
             strategy = getattr(neo4j_repository, strategy_name)

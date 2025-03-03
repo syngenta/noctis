@@ -6,10 +6,10 @@ from noctis.data_transformation.neo4j.neo4j_formatter import (
     Node,
     Relationship,
     GraphRecord,
-    DataContainer,
 )
 
-from neo4j import Result
+from noctis.data_architecture.datacontainer import DataContainer
+
 from neo4j import Record
 from neo4j.graph import Node as neo4jNode
 from neo4j.graph import Relationship as neo4jRelationship
@@ -233,13 +233,12 @@ class TestFormatResult(unittest.TestCase):
 
         mock_result = [Mock(), Mock()]
 
-        result = format_result(mock_result)
+        result = format_result(mock_result, "M1")
 
         self.assertIsInstance(result, DataContainer)
         self.assertEqual(len(result.records), 2)
 
-        for key, record in result.records.items():
-            self.assertIsInstance(key, int)
+        for record in result.records:
             self.assertIsInstance(record, GraphRecord)
             self.assertEqual(len(record.nodes), 2)  # Now expecting 2 nodes
             self.assertEqual(len(record.relationships), 1)

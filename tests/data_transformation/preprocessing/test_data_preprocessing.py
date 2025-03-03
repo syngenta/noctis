@@ -1,6 +1,7 @@
 import unittest
-from unittest.mock import Mock, patch, call, mock_open
+from unittest.mock import Mock, MagicMock, patch, call, mock_open
 import pandas as pd
+import numpy as np
 
 import noctis.data_transformation.preprocessing.data_preprocessing
 from noctis.data_transformation.preprocessing.data_preprocessing import (
@@ -20,7 +21,8 @@ from noctis.data_transformation.preprocessing.data_preprocessing import (
     EmptyHeaderError,
 )
 from noctis.data_architecture.graph_schema import GraphSchema
-from noctis.data_architecture.datamodel import DataContainer, Node, Relationship
+from noctis.data_architecture.datamodel import Node, Relationship
+from noctis.data_architecture.datacontainer import DataContainer
 from abc import ABC
 from linchemin.cgu.syngraph import (
     SynGraph,
@@ -28,42 +30,98 @@ from linchemin.cgu.syngraph import (
     MonopartiteMolSynGraph,
     BipartiteSynGraph,
 )
-
-# from noctis.data_transformation.preprocessing.graph_expander import GraphExpander, ReactionPreProcessor
+from dask.distributed import Client, as_completed
+from tqdm import tqdm
 
 
 class TestPreprocessor(unittest.TestCase):
     @patch(
         "noctis.data_transformation.preprocessing.data_preprocessing.CSVPreprocessor"
     )
-    def test_preprocess_csv_for_neo4j(self, mock_csv_preprocessor):
-        schema = {"some": "schema"}
-        config = PreprocessorConfig(
-            output_folder="output",
-            tmp_folder="tmp",
-            validation=True,
-            parallel=False,
-            prefix="K",
-            blocksize=10,
-            chunksize=1000,
-            inp_chem_format="smiles",
-            out_chem_format="smiles",
-        )
-        preprocessor = Preprocessor(schema)
+    def test_preprocess_csv_for_neo4j_serial(self, mock_csv_preprocessor):
+        schema = {
+            "base_nodes": {"chemical_equation": "CE", "molecule": "MM"},
+            "base_relationships": {
+                "product": {
+                    "type": "PRODUCT",
+                    "start_node": "chemical_equation",
+                    "end_node": "molecule",
+                },
+                "reactant": {
+                    "type": "REACTANT",
+                    "start_node": "molecule",
+                    "end_node": "chemical_equation",
+                },
+            },
+        }
+
+        preprocessor = Preprocessor(schema=GraphSchema.build_from_dict(schema))
         input_file = "test.csv"
         # Create a mock instance for CSVPreprocessor
         mock_csv_instance = Mock()
         mock_csv_preprocessor.return_value = mock_csv_instance
 
-        preprocessor.preprocess_csv_for_neo4j(input_file, config)
+        preprocessor.preprocess_csv_for_neo4j_serial(
+            input_file,
+            output_folder="output",
+            tmp_folder="tmp",
+            validation=True,
+            prefix="K",
+            chunksize=1000,
+            inp_chem_format="smiles",
+            out_chem_format="smiles",
+        )
 
-        mock_csv_preprocessor.assert_called_once_with(schema, config)
-        mock_csv_instance.run.assert_called_once_with(input_file)
+        # Assert that CSVPreprocessor was called once
+        mock_csv_preprocessor.assert_called_once()
+
+        # Get the arguments of the call
+        call_args = mock_csv_preprocessor.call_args
+
+        # Assert the first argument is the schema
+        self.assertIsInstance(call_args[0][0], GraphSchema)
+
+        # Assert the second argument is a PreprocessorConfig instance
+        self.assertIsInstance(call_args[0][1], PreprocessorConfig)
+
+        # Assert specific attributes of the PreprocessorConfig
+        config = call_args[0][1]
+        graph_schema = call_args[0][0]
+        self.assertEqual(config.output_folder, "output")
+        self.assertEqual(config.tmp_folder, "tmp")
+        self.assertTrue(config.validation)
+        self.assertEqual(config.prefix, "K")
+        self.assertEqual(config.chunksize, 1000)
+        self.assertEqual(config.inp_chem_format, "smiles")
+        self.assertEqual(config.out_chem_format, "smiles")
+        self.assertEqual(graph_schema.base_nodes["chemical_equation"], "CE")
+        self.assertEqual(graph_schema.base_nodes["molecule"], "MM")
+
+        # You can add more assertions for other attributes as needed
+
+        # If you want to check that no other unexpected attributes were set:
+        expected_attributes = {
+            "output_folder",
+            "tmp_folder",
+            "validation",
+            "prefix",
+            "chunksize",
+            "inp_chem_format",
+            "out_chem_format",
+            "delete_tmp",
+            "delimiter",
+            "lineterminator",
+            "quotechar",
+            "blocksize",
+            "nrows",
+        }
+        self.assertEqual(set(vars(config).keys()), expected_attributes)
 
     def test_preprocessor_initialization(self):
-        schema = {"some": "schema"}
+        schema = GraphSchema()
+        schema.base_nodes["molecule"] = "TESTMOLECULE"
 
-        preprocessor = Preprocessor(schema)
+        preprocessor = Preprocessor(schema=schema)
 
         self.assertEqual(preprocessor.schema, schema)
 
@@ -71,19 +129,7 @@ class TestPreprocessor(unittest.TestCase):
         "noctis.data_transformation.preprocessing.data_preprocessing.PythonObjectPreprocessorFactory"
     )
     def test_preprocess_object_for_neo4j(self, mock_factory):
-        schema = {"some": "schema"}
-        config = PreprocessorConfig(
-            output_folder="output",
-            tmp_folder="tmp",
-            validation=True,
-            parallel=False,
-            prefix="K",
-            blocksize=100,
-            chunksize=1000,
-            inp_chem_format="smiles",
-            out_chem_format="smiles",
-        )
-        preprocessor = Preprocessor(schema)
+        preprocessor = Preprocessor()
         mock_preprocessor = Mock(spec=PythonObjectPreprocessorInterface)
         mock_factory.get_preprocessor.return_value = mock_preprocessor
         mock_data_container = Mock(spec=DataContainer)
@@ -92,9 +138,9 @@ class TestPreprocessor(unittest.TestCase):
         # Test with DataFrame
         df_data = pd.DataFrame({"col1": [1, 2, 3], "col2": ["a", "b", "c"]})
         data_type = "pandas"
-        result = preprocessor.preprocess_object_for_neo4j(df_data, data_type, config)
+        result = preprocessor.preprocess_object_for_neo4j(df_data, data_type)
 
-        mock_factory.get_preprocessor.assert_called_once_with(data_type, schema, config)
+        self._assert_get_preprocessor_call(mock_factory, data_type)
         mock_preprocessor.run.assert_called_once_with(df_data)
         self.assertEqual(result, mock_data_container)
 
@@ -105,11 +151,9 @@ class TestPreprocessor(unittest.TestCase):
         # Test with list of strings
         string_data = ["CCO>>CC(=O)O", "C=C>>CC"]
         data_type = "reaction_strings"
-        result = preprocessor.preprocess_object_for_neo4j(
-            string_data, data_type, config
-        )
+        result = preprocessor.preprocess_object_for_neo4j(string_data, data_type)
 
-        mock_factory.get_preprocessor.assert_called_once_with(data_type, schema, config)
+        self._assert_get_preprocessor_call(mock_factory, data_type)
         mock_preprocessor.run.assert_called_once_with(string_data)
         self.assertEqual(result, mock_data_container)
 
@@ -121,13 +165,18 @@ class TestPreprocessor(unittest.TestCase):
         mock_syngraph = Mock(spec=SynGraph)
         syngraph_data = [mock_syngraph, mock_syngraph]
         data_type = "syngraph"
-        result = preprocessor.preprocess_object_for_neo4j(
-            syngraph_data, data_type, config
-        )
+        result = preprocessor.preprocess_object_for_neo4j(syngraph_data, data_type)
 
-        mock_factory.get_preprocessor.assert_called_once_with(data_type, schema, config)
+        self._assert_get_preprocessor_call(mock_factory, data_type)
         mock_preprocessor.run.assert_called_once_with(syngraph_data)
         self.assertEqual(result, mock_data_container)
+
+    def _assert_get_preprocessor_call(self, mock_factory, expected_data_type):
+        mock_factory.get_preprocessor.assert_called_once()
+        call_args = mock_factory.get_preprocessor.call_args[0]
+        self.assertEqual(call_args[0], expected_data_type)
+        self.assertIsInstance(call_args[1], GraphSchema)
+        self.assertIsInstance(call_args[2], PreprocessorConfig)
 
     def test_get_failed_strings_for_csv_preprocessor(self):
         preprocessor = Preprocessor()
@@ -159,13 +208,22 @@ class TestPreprocessor(unittest.TestCase):
             preprocessor.get_failed_strings()
 
     def test_preprocess_csv_for_neo4j_default_config(self):
-        schema = GraphSchema()
-        preprocessor = Preprocessor(schema)
+        preprocessor = Preprocessor()
         with patch(
             "noctis.data_transformation.preprocessing.data_preprocessing.CSVPreprocessor"
         ) as mock_csv_preprocessor:
-            preprocessor.preprocess_csv_for_neo4j("input.csv")
-            mock_csv_preprocessor.assert_called_once_with(schema, PreprocessorConfig())
+            preprocessor.preprocess_csv_for_neo4j_serial("input.csv")
+            # Assert that CSVPreprocessor was called once
+            mock_csv_preprocessor.assert_called_once()
+
+            # Get the arguments of the call
+            call_args = mock_csv_preprocessor.call_args
+
+            # Assert the first argument is the schema
+            self.assertIsInstance(call_args[0][0], GraphSchema)
+
+            # Assert the second argument is a PreprocessorConfig instance
+            self.assertIsInstance(call_args[0][1], PreprocessorConfig)
 
     def test_preprocess_object_for_neo4j_default_config(self):
         schema = GraphSchema()
@@ -192,7 +250,6 @@ class TestPandasRowPreprocessor(unittest.TestCase):
             output_folder="/output",
             tmp_folder="/tmp",
             validation=True,
-            parallel=False,
             prefix="test_",
             blocksize=64,
             chunksize=1000,
@@ -343,7 +400,6 @@ class TestCSVPreprocessor(unittest.TestCase):
             output_folder="/output",
             tmp_folder="/tmp",
             validation=True,
-            parallel=False,
             prefix="test_",
             blocksize=64,
             chunksize=1000,
@@ -362,14 +418,24 @@ class TestCSVPreprocessor(unittest.TestCase):
         new_callable=mock_open,
         read_data="header1,header2\nvalue1,value2",
     )
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing._delete_tmp_folder"
+    )
+    @patch.object(CSVPreprocessor, "_merge_all_partition_files")
     @patch.object(CSVPreprocessor, "_validate_the_header")
     @patch.object(CSVPreprocessor, "_run_parallel")
     @patch.object(CSVPreprocessor, "_run_serial")
     def test_run_parallel(
-        self, mock_run_serial, mock_run_parallel, mock_validate_header, mock_file
+        self,
+        mock_run_serial,
+        mock_run_parallel,
+        mock_validate_header,
+        mock_merge_all_partition_files,
+        mock_delete_tmp_folder,
+        mock_file,
     ):
         self.config.parallel = True
-        self.preprocessor.run(self.input_file)
+        self.preprocessor.run(self.input_file, parallel=True)
         mock_validate_header.assert_called_once()
         mock_run_parallel.assert_called_once()
         mock_run_serial.assert_not_called()
@@ -379,45 +445,113 @@ class TestCSVPreprocessor(unittest.TestCase):
         new_callable=mock_open,
         read_data="header1,header2\nvalue1,value2",
     )
+    @patch(
+        "noctis.data_transformation.preprocessing.data_preprocessing._delete_tmp_folder"
+    )
+    @patch.object(CSVPreprocessor, "_merge_all_partition_files")
     @patch.object(CSVPreprocessor, "_validate_the_header")
     @patch.object(CSVPreprocessor, "_run_parallel")
     @patch.object(CSVPreprocessor, "_run_serial")
     def test_run_serial(
-        self, mock_run_serial, mock_run_parallel, mock_validate_header, mock_file
+        self,
+        mock_run_serial,
+        mock_run_parallel,
+        mock_validate_header,
+        mock_merge_all_partition_files,
+        mock_delete_tmp_folder,
+        mock_file,
     ):
-        self.config.parallel = False
-        self.preprocessor.run(self.input_file)
+        self.preprocessor.run(self.input_file, parallel=False)
         mock_validate_header.assert_called_once()
         mock_run_serial.assert_called_once()
         mock_run_parallel.assert_not_called()
 
     @patch("noctis.data_transformation.preprocessing.data_preprocessing.Client")
     @patch("noctis.data_transformation.preprocessing.data_preprocessing.dd.read_csv")
-    def test_run_parallel_execution(self, mock_read_csv, mock_client):
+    @patch("noctis.data_transformation.preprocessing.data_preprocessing.np.concatenate")
+    @patch("noctis.data_transformation.preprocessing.data_preprocessing.np.cumsum")
+    @patch("noctis.data_transformation.preprocessing.data_preprocessing.as_completed")
+    def test_run_parallel_execution(
+        self,
+        mock_as_completed,
+        mock_cumsum,
+        mock_concatenate,
+        mock_read_csv,
+        mock_client,
+    ):
+        # Mock the Dask DataFrame
         mock_ddf = Mock()
+        mock_ddf.npartitions = 3
         mock_read_csv.return_value = mock_ddf
 
-        mock_client_instance = Mock()
+        # Mock partition sizes
+        mock_partition_sizes = MagicMock()
+        mock_ddf.map_partitions.return_value.compute.return_value = mock_partition_sizes
+
+        # Mock numpy functions
+        mock_cumsum.return_value = np.array([100, 250, 450])
+        mock_concatenate.return_value = np.array([0, 100, 250])
+
+        # Mock the Dask Client and its compute method
+        mock_client_instance = Mock(spec=Client)
         mock_client.return_value = mock_client_instance
 
-        self.config.parallel = True
-        self.preprocessor._run_parallel()
+        # Mock the futures and their results
+        mock_futures = [Mock(), Mock(), Mock()]
+        for future in mock_futures:
+            future.result.return_value = None
+        mock_client_instance.compute.return_value = mock_futures
+        mock_as_completed.return_value = mock_futures
 
-        mock_client.assert_called_once()
-        mock_read_csv.assert_called_once_with(
-            self.preprocessor.input_file, blocksize=self.config.blocksize
+        # Run the method
+        self.preprocessor._run_parallel(dask_client=None)
+
+        # Check if map_partitions was called twice
+        assert (
+            mock_ddf.map_partitions.call_count == 2
+        ), f"Expected 2 calls to map_partitions, got {mock_ddf.map_partitions.call_count}"
+
+        # Check the first call to map_partitions (for calculating partition sizes)
+        first_call = mock_ddf.map_partitions.call_args_list[0]
+        assert (
+            first_call[0][0] == len
+        ), "First call to map_partitions should be with len function"
+
+        # Check the second call to map_partitions (for processing partitions)
+        second_call = mock_ddf.map_partitions.call_args_list[1]
+        assert callable(
+            second_call[0][0]
+        ), "Second call to map_partitions should be with a callable"
+        assert (
+            "meta" in second_call[1]
+        ), "Second call to map_partitions should include 'meta' keyword argument"
+
+        # Assertions
+        mock_read_csv.assert_called_once()
+        mock_client_instance.compute.assert_called_once()
+        mock_as_completed.assert_called_once()
+
+        # Check that the client's compute method was called with the result of to_delayed()
+        assert (
+            mock_ddf.map_partitions.return_value.to_delayed.called
+        ), "to_delayed() should have been called on the result of map_partitions"
+        mock_client_instance.compute.assert_called_once_with(
+            mock_ddf.map_partitions.return_value.to_delayed.return_value
         )
-        mock_ddf.map_partitions.assert_called_once()
-        mock_ddf.map_partitions.return_value.compute.assert_called_once()
 
     @patch("pandas.read_csv")
     @patch.object(CSVPreprocessor, "_process_partition")
-    def test_run_serial_execution(self, mock_process_partition, mock_read_csv):
+    @patch("builtins.open", new_callable=mock_open, read_data="header\nrow1\nrow2\n")
+    def test_run_serial_execution(
+        self, mock_open, mock_process_partition, mock_read_csv
+    ):
+        # Mock the DataFrame returned by read_csv
         mock_df = Mock()
         mock_read_csv.return_value = [mock_df, mock_df]  # Simulate two partitions
 
         self.preprocessor._run_serial()
 
+        # Assertions
         self.assertEqual(mock_process_partition.call_count, 2)
         mock_process_partition.assert_has_calls([call(mock_df, 0), call(mock_df, 1)])
 
@@ -427,24 +561,44 @@ class TestCSVPreprocessor(unittest.TestCase):
         mock_read_csv.return_value = mock_df
         self.config.chunksize = None
 
+        # Assuming these are the default or configured parameters for read_csv
+        expected_kwargs = {
+            "delimiter": ",",
+            "quotechar": '"',
+            "lineterminator": None,
+            "nrows": None,
+        }
+
         result = list(self.preprocessor._serial_partition_generator())
 
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0], mock_df)
-        mock_read_csv.assert_called_once_with(self.preprocessor.input_file)
+        mock_read_csv.assert_called_once_with(
+            self.preprocessor.input_file, **expected_kwargs
+        )
 
     @patch("pandas.read_csv")
     def test_serial_partition_generator_with_chunksize(self, mock_read_csv):
         mock_df1, mock_df2 = Mock(), Mock()
         mock_read_csv.return_value = [mock_df1, mock_df2]
         self.config.chunksize = 1000
+        self.schema.base_nodes["chemical_equation"] = "ChemicalEquation"
 
         result = list(self.preprocessor._serial_partition_generator())
 
         self.assertEqual(len(result), 2)
         self.assertEqual(result, [mock_df1, mock_df2])
+
+        # Include additional expected keyword arguments
+        expected_kwargs = {
+            "chunksize": self.config.chunksize,
+            "delimiter": ",",
+            "quotechar": '"',
+            "lineterminator": None,
+            "nrows": None,
+        }
         mock_read_csv.assert_called_once_with(
-            self.preprocessor.input_file, chunksize=self.config.chunksize
+            self.preprocessor.input_file, **expected_kwargs
         )
 
     @patch(
@@ -477,6 +631,7 @@ class TestCSVPreprocessor(unittest.TestCase):
                 ({}, {}, "wrong_smiles"),  # Failed processing
             ]
         )
+        self.schema.base_nodes["chemical_equation"] = "ChemicalEquation"
 
         with patch.object(self.preprocessor, "_process_row", mock_process_row):
             self.preprocessor._process_partition(mock_partition_data, 0)
@@ -516,32 +671,61 @@ class TestCSVPreprocessor(unittest.TestCase):
     ):
         df = pd.DataFrame(
             {
-                "ChemicalEquation.smiles": ["CCO>>CC(=O)O", "InvalidSmiles", "C=C>>CC"],
-                "ChemicalEquation.name": ["Reaction1", "Reaction2", "Reaction3"],
+                "ChemicalEquation.smiles": [
+                    "CCO>>CC(=O)O",
+                    "InvalidSmiles",
+                    "C=C>>CC",
+                    pd.NA,
+                ],
+                "ChemicalEquation.name": [
+                    "Reaction1",
+                    "Reaction2",
+                    "Reaction3",
+                    "Reaction4",
+                ],
             }
         )
+
+        self.schema.base_nodes["chemical_equation"] = "ChemicalEquation"
+        self.config.inp_chem_format = "smiles"
 
         mock_process_row = Mock(
             side_effect=[
                 ({"Node1": [Mock()]}, {"Rel1": [Mock()]}, None),
                 ({}, {}, "InvalidSmiles"),
                 ({"Node2": [Mock()]}, {"Rel2": [Mock()]}, None),
+                ({}, {}, pd.NA),
             ]
         )
 
         with patch.object(self.preprocessor, "_process_row", mock_process_row):
             self.preprocessor._process_partition(df, 0)
 
-        mock_save_list.assert_called_once_with(
-            ["InvalidSmiles"],
-            header="smiles",
+        # Check call for failed strings
+        mock_save_list.assert_any_call(
+            [["InvalidSmiles", 3]],
+            header=["ChemicalEquation.smiles", "index"],
             output_dir=self.config.tmp_folder,
             name="failed_strings",
             partition_num=0,
         )
-        mock_save_dataframes.assert_called_once()
+
+        # Check call for empty strings
+        mock_save_list.assert_any_call(
+            [[5]],
+            header=["index"],
+            output_dir=self.config.tmp_folder,
+            name="empty_strings",
+            partition_num=0,
+        )
+
+        # Ensure _save_list_to_partition_csv was called exactly twice
+        assert mock_save_list.call_count == 2
+
+        # Check other method calls
         mock_export_nodes.assert_called_once()
         mock_export_relationships.assert_called_once()
+        mock_save_dataframes.assert_called_once()
 
 
 class TestPythonObjectPreprocessorInterface(unittest.TestCase):
@@ -604,6 +788,7 @@ class TestPythonObjectPreprocessorInterface(unittest.TestCase):
 class TestDataFramePreprocessor(unittest.TestCase):
     def setUp(self):
         self.schema = Mock(spec=GraphSchema)
+        self.schema.base_nodes = {"chemical_equation": "CE"}
         self.config = Mock(spec=PreprocessorConfig)
         self.preprocessor = DataFramePreprocessor(self.schema, self.config)
 
@@ -659,7 +844,9 @@ class TestDataFramePreprocessor(unittest.TestCase):
 
         mock_validate_header.assert_called_once_with(["col1", "col2"])
         mock_create_data_container.assert_called_once_with(
-            [mock_nodes["Node1"][0]], [mock_relationships["Rel1"][0]]
+            [mock_nodes["Node1"][0]],
+            [mock_relationships["Rel1"][0]],
+            self.schema.base_nodes["chemical_equation"],
         )
         self.assertEqual(result, mock_create_data_container.return_value)
 
@@ -701,7 +888,9 @@ class TestDataFramePreprocessor(unittest.TestCase):
             mock_relationships2["Rel2"][0],
         ]
         mock_create_data_container.assert_called_once_with(
-            expected_nodes, expected_relationships
+            expected_nodes,
+            expected_relationships,
+            self.schema.base_nodes["chemical_equation"],
         )
         self.assertEqual(result, mock_create_data_container.return_value)
 
@@ -752,7 +941,9 @@ class TestDataFramePreprocessor(unittest.TestCase):
         )
 
         mock_create_data_container.assert_called_once_with(
-            [mock_node1, mock_node2, mock_node3, mock_node4], [mock_rel1, mock_rel2]
+            [mock_node1, mock_node2, mock_node3, mock_node4],
+            [mock_rel1, mock_rel2],
+            self.schema.base_nodes["chemical_equation"],
         )
         self.assertEqual(result, mock_create_data_container.return_value)
 
@@ -850,6 +1041,7 @@ class TestChemicalStringPreprocessorBase(unittest.TestCase):
 class TestReactionStringsPreprocessor(unittest.TestCase):
     def setUp(self):
         self.schema = Mock(spec=GraphSchema)
+        self.schema.base_nodes = {"chemical_equation": "CE"}
         self.config = Mock(spec=PreprocessorConfig)
         self.preprocessor = ReactionStringsPreprocessor(self.schema, self.config)
 
@@ -929,7 +1121,9 @@ class TestReactionStringsPreprocessor(unittest.TestCase):
         ]
 
         mock_create_data_container.assert_called_once_with(
-            expected_nodes, expected_relationships
+            expected_nodes,
+            expected_relationships,
+            self.schema.base_nodes["chemical_equation"],
         )
         self.assertEqual(result, mock_data_container)
 
@@ -937,6 +1131,7 @@ class TestReactionStringsPreprocessor(unittest.TestCase):
 class TestSynGraphPreprocessor(unittest.TestCase):
     def setUp(self):
         self.schema = Mock(spec=GraphSchema)
+        self.schema.base_nodes = {"chemical_equation": "ChemicalEquation"}
         self.config = Mock(spec=PreprocessorConfig)
         self.preprocessor = SynGraphPreprocessor(self.schema, self.config)
 
@@ -958,10 +1153,10 @@ class TestSynGraphPreprocessor(unittest.TestCase):
 
         # Mock extract_reactions_from_syngraph
         mock_extract_reactions.side_effect = [
-            [{"query_id": 1, "output_string": "CCO>>CC(=O)O"}],
+            [{"query_id": 1, "input_string": "CCO>>CC(=O)O"}],
             [
-                {"query_id": 2, "output_string": "C=C>>CC"},
-                {"query_id": 3, "output_string": "CC>>CCC"},
+                {"query_id": 2, "input_string": "C=C>>CC"},
+                {"query_id": 3, "input_string": "CC>>CCC"},
             ],
         ]
 
@@ -1056,7 +1251,9 @@ class TestSynGraphPreprocessor(unittest.TestCase):
         ]
 
         mock_create_data_container.assert_called_once_with(
-            expected_nodes, expected_relationships
+            expected_nodes,
+            expected_relationships,
+            self.schema.base_nodes["chemical_equation"],
         )
         self.assertEqual(result, mock_data_container)
 
@@ -1161,7 +1358,6 @@ class TestEndToEnd(unittest.TestCase):
             output_folder="output",
             tmp_folder="tmp",
             validation=False,
-            parallel=False,
             prefix="test_",
             blocksize=64,
             chunksize=1000,

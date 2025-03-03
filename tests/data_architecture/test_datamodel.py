@@ -5,8 +5,8 @@ from noctis.data_architecture.datamodel import (
     Node,
     Relationship,
     GraphRecord,
-    DataContainer,
 )
+from noctis.data_architecture.datacontainer import DataContainer
 
 
 def test_node_creation_valid():
@@ -239,11 +239,11 @@ def test_data_container_equality():
     record1 = GraphRecord(nodes=[node1, node2], relationships=[rel])
     record2 = GraphRecord(nodes=[node2, node1], relationships=[rel])
 
-    container1 = DataContainer(records={0: record1, 1: record2})
-    container2 = DataContainer(records={1: record2, 0: record1})
+    container1 = DataContainer(records=[record1, record2])
+    container2 = DataContainer(records=[record1, record2])
     assert container1 == container2
 
-    container3 = DataContainer(records={0: record1})
+    container3 = DataContainer(records=[record1])
     assert container1 != container3
 
     assert container1 != "not a DataContainer"
@@ -257,30 +257,27 @@ def test_add_record():
     container.add_record(record1)
     assert container.records[0] == record1
 
-    record2 = GraphRecord(nodes=[node1])
-    container.add_record(record2, record_key=2)
-    assert container.records[2] == record2
-
 
 def test_get_record():
     # Test get_record method
     node1 = Node(node_label="Node1", uid="AB123")
     record1 = GraphRecord(nodes=[node1])
 
-    container = DataContainer(records={0: record1})
+    container = DataContainer(records=[record1])
     assert container.get_record(0) == record1
 
-    with pytest.raises(KeyError):
+    with pytest.raises(IndexError):
         container.get_record(1)
 
 
 def test_get_records():
     # Test get_records method
     node1 = Node(node_label="Node1", uid="AB123")
+    node2 = Node(node_label="Node2", uid="AB123")
     record1 = GraphRecord(nodes=[node1])
-    record2 = GraphRecord(nodes=[node1])
+    record2 = GraphRecord(nodes=[node2])
 
-    container = DataContainer(records={0: record1, 1: record2})
+    container = DataContainer(records=[record1, record2])
     records = container.get_records([0, 1])
     assert len(records) == 2
     assert record1 in records
@@ -290,10 +287,11 @@ def test_get_records():
 def test_get_subcontainer_with_records():
     # Test get_subcontainer_with_records method
     node1 = Node(node_label="Node1", uid="AB123")
+    node2 = Node(node_label="Node2", uid="AB123")
     record1 = GraphRecord(nodes=[node1])
-    record2 = GraphRecord(nodes=[node1])
+    record2 = GraphRecord(nodes=[node2])
 
-    container = DataContainer(records={0: record1, 1: record2})
+    container = DataContainer(records=[record1, record2])
     subcontainer = container.get_subcontainer_with_records([0, 1])
     assert len(subcontainer.records) == 2
     assert subcontainer.records[0] == record1

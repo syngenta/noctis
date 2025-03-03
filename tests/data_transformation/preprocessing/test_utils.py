@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from noctis import settings
-from noctis.data_transformation.preprocessing.utils import (
+from noctis.data_transformation.preprocessing.utilities import (
     _update_partition_dict_with_row,
     _save_dataframes_to_partition_csv,
     explode_smiles_like_reaction_string,
@@ -15,6 +15,7 @@ from noctis.data_transformation.preprocessing.utils import (
 )
 from pydantic import ValidationError
 from noctis.data_architecture.datamodel import Node, Relationship
+from noctis.data_architecture.graph_schema import GraphSchema
 
 
 class TestDataProcessingFunctions(unittest.TestCase):
@@ -38,7 +39,12 @@ class TestDataProcessingFunctions(unittest.TestCase):
                 "rel2": pd.DataFrame({"col4": [7, 8]}),
             }
 
-            _save_dataframes_to_partition_csv(dict_nodes, dict_relationships, tmpdir, 1)
+            gs = GraphSchema()
+            gs.extra_nodes = {"node1": "N1", "node2": "N2"}
+            gs.extra_relationships = {"rel1": {"type": "R1"}, "rel2": {"type": "R2"}}
+            _save_dataframes_to_partition_csv(
+                dict_nodes, dict_relationships, gs, tmpdir, 1
+            )
 
             # Check if directory was created
             self.assertTrue(os.path.exists(os.path.join(tmpdir, "partition_1")))
@@ -48,10 +54,10 @@ class TestDataProcessingFunctions(unittest.TestCase):
 
             # Check if to_csv was called with the correct filenames
             expected_calls = [
-                os.path.join(tmpdir, "partition_1", "NODE1.csv"),
-                os.path.join(tmpdir, "partition_1", "NODE2.csv"),
-                os.path.join(tmpdir, "partition_1", "REL1.csv"),
-                os.path.join(tmpdir, "partition_1", "REL2.csv"),
+                os.path.join(tmpdir, "partition_1", "N1.csv"),
+                os.path.join(tmpdir, "partition_1", "N2.csv"),
+                os.path.join(tmpdir, "partition_1", "R1.csv"),
+                os.path.join(tmpdir, "partition_1", "R2.csv"),
             ]
             actual_calls = [call[0][0] for call in mock_to_csv.call_args_list]
             self.assertEqual(sorted(actual_calls), sorted(expected_calls))

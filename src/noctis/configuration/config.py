@@ -14,7 +14,7 @@ encoded into the package source code. \n
 The user can partially or totally override these values by providing a
 custom settings.yaml file. \n
 By default the program looks into the user home directory (<home_dir>) for a folder
-that has the name of the package (<package_name>) and for a
+that has the name of the package (noctis) and for a
 settings.yaml and .secrets.yaml files inside it. \n
 \n
 If the directory or the necessary files are missing the
@@ -24,7 +24,7 @@ Tha package provides a convenient cli to create them, using defaults
 
 .. code-block:: shell
 
-    <package_name>_configure
+    noctis_configure
 
 By executing this command in the environment where the package is installed, the command
 will generate the missing files. \n
@@ -37,7 +37,7 @@ overriding the encoded defaults. \n
 It is possible to override the instruction provided settings.yaml by
 pointing to another settings file:\n
 the values provided in this file override the values in the
-<home_dir>/<package_name>/.settings.yaml file. \n
+<home_dir>/noctis/.settings.yaml file. \n
 This is done by setting the environment variable INCLUDES_FOR_DYNACONF
  and pointing it to a user-specific setting file
 (https://www.dynaconf.com/configuration/)

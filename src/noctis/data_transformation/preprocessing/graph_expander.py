@@ -1,6 +1,3 @@
-# from noctis.data_transformation.preprocessing.reaction_preprocessing import (
-#     ReactionPreProcessor,
-# )
 from noctis.data_transformation.preprocessing.core_graph_builder import (
     build_core_graph,
     ValidatedStringBuilder,
@@ -16,6 +13,15 @@ logger = console_logger(__name__)
 
 
 class GraphExpander:
+    """
+    Class to expand graph data based on a given schema, including nodes and relationships.
+
+    Attributes:
+        schema (GraphSchema): The schema defining the structure of the graph.
+        nodes (dict[str, list[Node]]): Dictionary to store expanded nodes.
+        relationships (dict[str, list[Relationship]]): Dictionary to store expanded relationships.
+    """
+
     def __init__(self, schema: GraphSchema):
         self.schema = schema
         self.nodes = {}
@@ -24,6 +30,18 @@ class GraphExpander:
     def expand_reaction_step(
         self, step_dict: dict[str, dict], input_format, output_format, validation
     ) -> tuple[dict[str:dict], dict[str:dict]]:
+        """
+        Expand a reaction step into nodes and relationships.
+
+        Args:
+            step_dict (dict[str, dict]): Dictionary containing step data for the reaction.
+            input_format (str): Format of the input reaction string.
+            output_format (str): Format for the output reaction string.
+            validation (bool): Flag indicating whether to use validation in processing.
+
+        Returns:
+            tuple[dict[str, dict], dict[str, dict]]: Expanded nodes and relationships.
+        """
         # expand core schema
         if validation:
             processor = ValidatedStringBuilder(
@@ -54,6 +72,12 @@ class GraphExpander:
         return self.nodes, self.relationships
 
     def _expand_extra_nodes(self, step_dict):
+        """
+        Expand extra nodes based on the schema.
+
+        Args:
+            step_dict (dict[str, dict]): Dictionary containing step data for the reaction.
+        """
         for tag, label in self.schema.extra_nodes.items():
             if label not in step_dict:
                 logger.warning(
@@ -71,6 +95,9 @@ class GraphExpander:
             self.nodes.setdefault(tag, []).append(node)
 
     def _expand_extra_relationships(self):
+        """
+        Expand extra relationships based on the schema.
+        """
         for tag, relationship_schema in self.schema.extra_relationships.items():
             start_node = relationship_schema["start_node"]
             end_node = relationship_schema["end_node"]

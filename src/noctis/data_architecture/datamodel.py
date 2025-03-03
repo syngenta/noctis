@@ -3,16 +3,15 @@ from pydantic import BaseModel, field_validator, Field, ConfigDict, model_valida
 from typing import Annotated
 from pydantic import StringConstraints
 
-from typing import List, Optional
-
-
-# TODO: load_from_dict methods to be revised
+from typing import Optional
 
 
 class Node(BaseModel):
+    """Represents a node in a graph with a unique identifier and optional properties."""
+
     model_config = ConfigDict(populate_by_name=True, frozen=True)
-    node_label: Annotated[str, StringConstraints(pattern=r"^[A-Z][\w\-.]*$")]
-    uid: Annotated[str, StringConstraints(pattern=r"^[A-Z]{1,2}\d+$")]
+    node_label: Annotated[str, StringConstraints(pattern=r"^[A-Z][\w\-]*$")]
+    uid: Annotated[str, StringConstraints(pattern=r"^[A-Z]{0,3}{1,2}\d+$")]
     properties: Annotated[Optional[dict], Field(default={})]
 
     def __hash__(self):
@@ -24,10 +23,16 @@ class Node(BaseModel):
     def get(self, attribute_name: str) -> any:
         return getattr(self, attribute_name)
 
+    def __str__(self) -> str:
+        properties_preview = ", ".join(f"{k}: {v}" for k, v in self.properties.items())
+        return f"Node {{label={self.node_label}, uid={self.uid}, properties={properties_preview} }})"
+
 
 class Relationship(BaseModel):
+    """Represents a relationship between two nodes in a graph."""
+
     model_config = ConfigDict(populate_by_name=True, frozen=True)
-    relationship_type: Annotated[str, StringConstraints(pattern=r"^[A-Z0-9_.-]+$")]
+    relationship_type: Annotated[str, StringConstraints(pattern=r"^[A-Z0-9_-]+$")]
     start_node: Node
     end_node: Node
     properties: Annotated[Optional[dict], Field(default={})]
@@ -48,8 +53,18 @@ class Relationship(BaseModel):
     def get(self, attribute_name: str) -> any:
         return getattr(self, attribute_name)
 
+    def __str__(self) -> str:
+        properties_preview = ", ".join(f"{k}: {v}" for k, v in self.properties.items())
+        return (
+            f"Relationship {{type={self.relationship_type}, "
+            f"start={self.start_node.uid}, end={self.end_node.uid}, "
+            f"properties= {properties_preview} }})"
+        )
+
 
 class GraphRecord(BaseModel):
+    """Represents a record of nodes and relationships forming a graph."""
+
     nodes: list[Node] = Field(default=[])
     relationships: list[Relationship] = Field(default=[])
 
@@ -111,47 +126,18 @@ class GraphRecord(BaseModel):
             == other.get_all_relationships_start_end_uids()
         )
 
+    def __str__(self) -> str:
+        nodes_preview = ", ".join(
+            f"\nNode {{label: {node.node_label}, uid: {node.uid}, properties: {node.properties}}}"
+            for node in self.nodes
+        )
+        relationships_preview = ", ".join(
+            f"\nRelationship {{type: {rel.relationship_type}, start: {rel.start_node.uid}, end: {rel.end_node.uid}}}"
+            for rel in self.relationships
+        )
 
-class DataContainer(BaseModel):
-    records: dict[int, GraphRecord] = Field(default={})
-
-    def __eq__(self, other):
-        if isinstance(other, DataContainer):
-            if set(self.records.keys()) == set(other.records.keys()):
-                return all(
-                    self.records[key] == other.records[key]
-                    for key in self.records.keys()
-                )
-        return False
-
-    def add_record(self, record: GraphRecord, record_key: Optional[int] = None) -> None:
-        """To add a GraphRecord to a DataContainer"""
-        max_key = max(self.records.keys(), default=-1)
-        record_key = record_key or max_key + 1
-        self.records[record_key] = record
-
-    def get_record(self, record_key: int) -> GraphRecord:
-        return self.records[record_key]
-
-    def get_records(self, record_keys: list[int]) -> list[GraphRecord]:
-        return [self.records[key] for key in record_keys]
-
-    def get_subcontainer_with_records(self, record_keys: list[int]) -> "DataContainer":
-        subcontainer = DataContainer()
-        missing_keys: set[int] = set()
-
-        for key in record_keys:
-            if key in self.records:
-                subcontainer.add_record(
-                    self.records[key].__deepcopy__(), record_key=key
-                )
-            else:
-                missing_keys.add(key)
-
-        if missing_keys:
-            missing_keys_str = ", ".join(map(str, missing_keys))
-            raise KeyError(
-                f"Record keys {missing_keys_str} not found in DataContainer."
-            )
-
-        return subcontainer
+        return (
+            f"\nRecord("
+            f"\nnodes = [{nodes_preview}],"
+            f"\nrelationships = [{relationships_preview}])"
+        )

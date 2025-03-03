@@ -2,6 +2,7 @@ from unittest.mock import Mock, patch, mock_open
 import unittest
 import pandas as pd
 import warnings
+import os
 
 from noctis.repository.neo4j.neo4j_functions import (
     _generate_nodes_files_string,
@@ -16,9 +17,9 @@ from noctis.repository.neo4j.neo4j_functions import (
 from noctis.data_architecture.datamodel import (
     Node,
     Relationship,
-    DataContainer,
     GraphRecord,
 )
+from noctis.data_architecture.datacontainer import DataContainer
 
 
 class TestNeo4jFunctions(unittest.TestCase):
@@ -53,7 +54,7 @@ class TestNeo4jFunctions(unittest.TestCase):
             nodes=self.sample_nodes, relationships=self.sample_relationships
         )
         self.sample_data_container = DataContainer(
-            records={0: self.sample_record, 1: self.sample_record}
+            records=[self.sample_record, self.sample_record]
         )
 
     def test_create_node_queries(self):
@@ -114,9 +115,9 @@ class TestNeo4jFunctions(unittest.TestCase):
                 "column1": [1, 3, 5],
                 "column2": [2, 4, 6],
                 "properties": [
-                    {"property1": "value1"},
-                    {"property2": "value2"},
-                    {"property1": "value3", "property2": "value4"},
+                    '{"property1": "value1", "property2": "value5"}',
+                    '{"property2": "value2"}',
+                    '{"property1": "value3", "property2": "value4"}',
                 ],
             }
         )
@@ -125,28 +126,30 @@ class TestNeo4jFunctions(unittest.TestCase):
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             result = _get_dict_keys_from_csv("test.csv")
-
+        print(result)
         # Assert
-        self.assertEqual(set(result), {"property1", "property2"})
-        self.assertEqual(len(w), 1)
-        self.assertIsInstance(w[0].message, UserWarning)
-        self.assertEqual(
-            str(w[0].message), "Some dictionaries are missing keys: {'property2'}"
-        )
+        assert set(result) == {"property1", "property2"}
+        assert len(w) == 1
+        assert isinstance(w[0].message, UserWarning)
+        assert str(w[0].message) == "Some dictionaries are missing keys: {'property1'}"
 
-        # Verify that open and read_csv were called correctly
+        # Verify that read_csv was called correctly
         mock_read_csv.assert_called_once_with("test.csv")
 
     def test_generate_nodes_files_string(self):
         prefix = "prefix"
         labels = ["Label1", "Label2"]
-        result = _generate_nodes_files_string(prefix, labels)
+        result = _generate_nodes_files_string(
+            folder_path=None, prefix_nodes=prefix, nodes_labels=labels
+        )
         expected = "{fileName:'file:/prefix_LABEL1.csv', labels:[]}, {fileName:'file:/prefix_LABEL2.csv', labels:[]}"
         self.assertEqual(result, expected)
 
     def test_generate_relationships_files_string(self):
         prefix = "prefix"
         types = ["Type1", "Type2"]
-        result = _generate_relationships_files_string(prefix, types)
+        result = _generate_relationships_files_string(
+            folder_path=None, prefix_relationships=prefix, relationships_types=types
+        )
         expected = "{fileName:'file:/prefix_TYPE1.csv', types:[]}, {fileName:'file:/prefix_TYPE2.csv', types:[]}"
         self.assertEqual(result, expected)

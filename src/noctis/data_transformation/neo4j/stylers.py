@@ -7,6 +7,7 @@ class Neo4jImportStyle(NodesRelationshipsStyle):
     COLUMN_NAMES_NODES = {
         "uid": "uid:ID",
         "node_label": ":LABEL",
+        "properties": "properties",
     }
     COLUMN_NAMES_RELATIONSHIPS = {
         "start_node": "uid:START_ID",
@@ -19,6 +20,8 @@ class Neo4jImportStyle(NodesRelationshipsStyle):
 class Neo4jLoadStyle(NodesRelationshipsStyle):
     COLUMN_NAMES_NODES = {
         "node_label": "label",
+        "uid": "uid",
+        "properties": "properties",
     }
     COLUMN_NAMES_RELATIONSHIPS = {
         "start_node": "startnode",

@@ -1,0 +1,28 @@
+{
+  "base_nodes": {
+    "chemical_equation": "ChemicalEquationNode",
+    "molecule": "MoleculeNode"
+  },
+  "base_relationships": {
+    "product": {
+      "type": "PRODUCT_RELATIONSHIP",
+      "start_node": "chemical_equation",
+      "end_node": "molecule"
+    },
+    "reactant": {
+      "type": "REACTANT_RELATIONSHIP",
+      "start_node": "molecule",
+      "end_node": "chemical_equation"
+    }
+  },
+  "extra_nodes": {
+    "catalyst": "CatalystNode"
+  },
+  "extra_relationships": {
+    "catalyzes": {
+      "type": "CATALYZES_RELATIONSHIP",
+      "start_node": "catalyst",
+      "end_node": "chemical_equation"
+    }
+  }
+}

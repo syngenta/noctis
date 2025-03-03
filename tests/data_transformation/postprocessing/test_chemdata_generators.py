@@ -22,8 +22,8 @@ from noctis.data_architecture.datamodel import (
     Node,
     Relationship,
     GraphRecord,
-    DataContainer,
 )
+from noctis.data_architecture.datacontainer import DataContainer
 from collections import defaultdict
 from noctis import settings
 from linchemin.cgu.syngraph import BipartiteSynGraph
@@ -155,12 +155,12 @@ class TestPandasGenerator(unittest.TestCase):
             nodes=self.sample_nodes, relationships=self.sample_relationships
         )
         self.sample_data_container = DataContainer(
-            records={0: self.sample_record, 1: self.sample_record}
+            records=[self.sample_record, self.sample_record], ce_label="CE"
         )
 
     def test_generate(self):
         nodes_df, relationships_df = self.generator.generate(
-            self.sample_data_container, by_record=False
+            self.sample_data_container.records, with_record_id=False, ce_label="CE"
         )
         self.assertIsInstance(nodes_df, pd.DataFrame)
         self.assertIsInstance(relationships_df, pd.DataFrame)
@@ -171,7 +171,7 @@ class TestPandasGenerator(unittest.TestCase):
 
     def test_generate_by_record(self):
         nodes_df, relationships_df = self.generator.generate(
-            self.sample_data_container, by_record=True
+            self.sample_data_container.records, with_record_id=True, ce_label="CE"
         )
         self.assertIsInstance(nodes_df, pd.DataFrame)
         self.assertIsInstance(relationships_df, pd.DataFrame)
@@ -182,7 +182,7 @@ class TestPandasGenerator(unittest.TestCase):
 
     def test_process_records(self):
         nodes_data, relationships_data = self.generator._process_records(
-            self.sample_data_container, by_record=False
+            self.sample_data_container.records, with_record_id=False
         )
         self.assertEqual(len(nodes_data), 2)
         self.assertEqual(len(relationships_data), 2)
@@ -191,7 +191,7 @@ class TestPandasGenerator(unittest.TestCase):
 
     def test_process_nodes(self):
         nodes_df = self.generator._process_nodes(
-            self.sample_record, record_id=0, by_record=False
+            self.sample_record, record_id=0, with_record_id=False
         )
         self.assertIsInstance(nodes_df, pd.DataFrame)
         self.assertEqual(len(nodes_df), 2)
@@ -199,7 +199,7 @@ class TestPandasGenerator(unittest.TestCase):
 
     def test_process_nodes_by_record(self):
         nodes_df = self.generator._process_nodes(
-            self.sample_record, record_id=0, by_record=True
+            self.sample_record, record_id=0, with_record_id=True
         )
         self.assertIsInstance(nodes_df, pd.DataFrame)
         self.assertEqual(len(nodes_df), 2)
@@ -208,7 +208,7 @@ class TestPandasGenerator(unittest.TestCase):
 
     def test_process_relationships(self):
         relationships_df = self.generator._process_relationships(
-            self.sample_record, record_id=0, by_record=False
+            self.sample_record, record_id=0, with_record_id=False
         )
         self.assertIsInstance(relationships_df, pd.DataFrame)
         self.assertEqual(len(relationships_df), 2)
@@ -216,7 +216,7 @@ class TestPandasGenerator(unittest.TestCase):
 
     def test_process_relationships_by_record(self):
         relationships_df = self.generator._process_relationships(
-            self.sample_record, record_id=0, by_record=True
+            self.sample_record, record_id=0, with_record_id=True
         )
         self.assertIsInstance(relationships_df, pd.DataFrame)
         self.assertEqual(len(relationships_df), 2)
@@ -226,7 +226,7 @@ class TestPandasGenerator(unittest.TestCase):
     def test_add_record_id_if_needed(self):
         df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]})
         result_df = self.generator._add_record_id_if_needed(
-            df, record_id=0, by_record=True
+            df, record_id=0, with_record_id=True
         )
         self.assertTrue("record_id" in result_df.columns)
         self.assertTrue(all(result_df["record_id"] == 0))
@@ -234,7 +234,7 @@ class TestPandasGenerator(unittest.TestCase):
     def test_add_record_id_if_not_needed(self):
         df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]})
         result_df = self.generator._add_record_id_if_needed(
-            df, record_id=0, by_record=False
+            df, record_id=0, with_record_id=False
         )
         self.assertFalse("record_id" in result_df.columns)
 
@@ -291,11 +291,13 @@ class TestNetworkXGenerator(unittest.TestCase):
             nodes=self.sample_nodes, relationships=self.sample_relationships
         )
         self.sample_data_container = DataContainer(
-            records={0: self.sample_record, 1: self.sample_record}
+            records=[self.sample_record, self.sample_record]
         )
 
     def test_generate_by_record(self):
-        result = self.generator.generate(self.sample_data_container, by_record=True)
+        result = self.generator.generate(
+            self.sample_data_container.records, with_record_id=True
+        )
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
         for graph in result:
@@ -304,13 +306,15 @@ class TestNetworkXGenerator(unittest.TestCase):
             self.assertEqual(len(graph.edges), 2)
 
     def test_generate_not_by_record(self):
-        result = self.generator.generate(self.sample_data_container, by_record=False)
+        result = self.generator.generate(
+            self.sample_data_container.records, with_record_id=False
+        )
         self.assertIsInstance(result, nx.Graph)
         self.assertEqual(len(result.nodes), 2)  # Nodes are unique across records
         self.assertEqual(len(result.edges), 2)  # Edges are unique across records
 
     def test_process_records(self):
-        result = self.generator._process_records(self.sample_data_container)
+        result = self.generator._process_records(self.sample_data_container.records)
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
         for graph in result:
@@ -394,12 +398,12 @@ class TestReactionStringGenerator(unittest.TestCase):
         ]
         self.sample_record = GraphRecord(nodes=self.sample_nodes, relationships=[])
         self.sample_data_container = DataContainer(
-            records={0: self.sample_record, 1: self.sample_record}
+            records=[self.sample_record, self.sample_record]
         )
 
     def test_generate_by_record(self):
         result = self.generator.generate(
-            self.sample_data_container, by_record=True, ce_label="CE"
+            self.sample_data_container.records, with_record_id=True, ce_label="CE"
         )
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
@@ -409,7 +413,7 @@ class TestReactionStringGenerator(unittest.TestCase):
 
     def test_generate_not_by_record(self):
         result = self.generator.generate(
-            self.sample_data_container, by_record=False, ce_label="CE"
+            self.sample_data_container.records, with_record_id=False, ce_label="CE"
         )
         self.assertIsInstance(result, dict)
         self.assertIn("smiles", result)
@@ -429,7 +433,9 @@ class TestReactionStringGenerator(unittest.TestCase):
         self.assertEqual(result, "CUSTOM_CE")
 
     def test_process_records(self):
-        result = self.generator._process_records(self.sample_data_container, "CE")
+        result = self.generator._process_records(
+            self.sample_data_container.records, "CE"
+        )
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
         for record_dict in result:
@@ -439,9 +445,9 @@ class TestReactionStringGenerator(unittest.TestCase):
     @patch("noctis.data_transformation.postprocessing.chemdata_generators.logger")
     def test_process_records_no_ce_nodes(self, mock_logger):
         data_container = DataContainer(
-            records={0: GraphRecord(nodes=[self.sample_nodes[0]], relationships=[])}
+            records=[GraphRecord(nodes=[self.sample_nodes[0]], relationships=[])]
         )
-        result = self.generator._process_records(data_container, "CE")
+        result = self.generator._process_records(data_container.records, "CE")
         self.assertEqual(result, [{}])
         mock_logger.warning.assert_called_once()
 
@@ -497,7 +503,7 @@ class TestSyngraphGenerator(unittest.TestCase):
         ]
         self.sample_record = GraphRecord(nodes=self.sample_nodes, relationships=[])
         self.sample_data_container = DataContainer(
-            records={0: self.sample_record, 1: self.sample_record}
+            records=[self.sample_record, self.sample_record]
         )
 
     @patch(
@@ -505,7 +511,7 @@ class TestSyngraphGenerator(unittest.TestCase):
     )
     def test_generate_by_record(self, mock_merge_syngraph):
         result = self.generator.generate(
-            self.sample_data_container, by_record=True, ce_label="CE"
+            self.sample_data_container.records, with_record_id=True, ce_label="CE"
         )
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
@@ -519,7 +525,7 @@ class TestSyngraphGenerator(unittest.TestCase):
     def test_generate_not_by_record(self, mock_merge_syngraph):
         mock_merge_syngraph.return_value = BipartiteSynGraph([])
         result = self.generator.generate(
-            self.sample_data_container, by_record=False, ce_label="CE"
+            self.sample_data_container.records, with_record_id=False, ce_label="CE"
         )
         self.assertIsInstance(result, BipartiteSynGraph)
         mock_merge_syngraph.assert_called_once()
@@ -536,7 +542,9 @@ class TestSyngraphGenerator(unittest.TestCase):
         self.assertEqual(result, "CUSTOM_CE")
 
     def test_process_records(self):
-        result = self.generator._process_records(self.sample_data_container, "CE")
+        result = self.generator._process_records(
+            self.sample_data_container.records, "CE"
+        )
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 2)
         for syngraph in result:
@@ -545,9 +553,9 @@ class TestSyngraphGenerator(unittest.TestCase):
     @patch("noctis.data_transformation.postprocessing.chemdata_generators.logger")
     def test_process_records_no_ce_nodes(self, mock_logger):
         data_container = DataContainer(
-            records={0: GraphRecord(nodes=[self.sample_nodes[2]], relationships=[])}
+            records=[GraphRecord(nodes=[self.sample_nodes[2]], relationships=[])]
         )
-        result = self.generator._process_records(data_container, "CE")
+        result = self.generator._process_records(data_container.records, "CE")
         self.assertEqual(result, [])
         mock_logger.warning.assert_called_once()
 

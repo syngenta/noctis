@@ -4,11 +4,13 @@ References
 .. currentmodule:: 'noctis'
 
 
-my_module
----------
-.. automodule:: noctis.my_module
+Data Architecture
+------------------
+.. automodule:: noctis.data_architecture
+    :members:
 .. autosummary::
     :toctree: generated
 
-     my_module.my_function
-     my_module.my_class
+     datacontainer.DataContainer
+     datamodel.Node
+     datamodel.GraphRecord

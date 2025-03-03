@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import ClassVar, Type, Union, Optional
+import os
+from urllib.parse import quote
 
 import pandas as pd
 from linchemin.cgu.syngraph import SynGraph
@@ -9,11 +11,10 @@ from noctis.data_architecture.graph_schema import GraphSchema
 from noctis.data_transformation.neo4j.stylers import Neo4jLoadStyle
 from noctis.data_transformation.preprocessing.data_preprocessing import (
     Preprocessor,
-    PreprocessorConfig,
 )
+from noctis.utilities import _wrap_text
 
-from noctis import settings
-from noctis.data_architecture.datamodel import DataContainer
+from noctis.data_architecture.datacontainer import DataContainer
 from noctis.repository.neo4j.neo4j_functions import (
     _convert_datacontainer_to_query,
     _generate_nodes_files_string,
@@ -48,11 +49,13 @@ class AbstractQuery(BaseModel):
 
     query_name: ClassVar[str]
     query_type: ClassVar[str]
-    is_parameterized: ClassVar[bool]
+    parameters_embedded: ClassVar[bool]
 
     query_args_required: ClassVar[list[str]]
     query_args_optional: ClassVar[list[str]] = []
     query: Union[list[str], str]
+
+    graph_schema: Optional[GraphSchema] = GraphSchema()
 
     @model_validator(mode="before")
     @classmethod
@@ -123,6 +126,78 @@ class Neo4jQueryRegistry:
         """To return a dictionary with all the registered query types and names"""
         return set(cls.queries.keys())
 
+    @classmethod
+    def info(cls):
+        print("Available Queries:")
+        print("==================")
+
+        queries = cls.get_all_queries()
+
+        # Define column widths
+        name_width = 30
+        type_width = 20
+        args_width = 35
+
+        # Print header
+        header = f"{'Name':<{name_width}}{'Type':<{type_width}}{'Required Args':<{args_width}}{'Optional Args':<{args_width}}"
+        print(header)
+        print("-" * len(header))
+
+        # Print each query's information
+        for query_name in sorted(queries):
+            query = cls.get_query_object(query_name)
+            args = query.list_arguments()
+
+            required_args = ", ".join(args["required"]) or "None"
+            optional_args = ", ".join(args["optional"]) or "None"
+
+            # Wrap long argument lists
+            required_args_lines = _wrap_text(required_args, args_width)
+            optional_args_lines = _wrap_text(optional_args, args_width)
+
+            # Print the first line
+            print(
+                f"{query_name:<{name_width}}"
+                f"{query.query_type:<{type_width}}"
+                f"{required_args_lines[0]:<{args_width}}"
+                f"{optional_args_lines[0]:<{args_width}}"
+            )
+
+            # Print any remaining lines
+            max_lines = max(len(required_args_lines), len(optional_args_lines))
+            for i in range(1, max_lines):
+                print(
+                    f"{'':<{name_width}}"
+                    f"{'':<{type_width}}"
+                    f"{required_args_lines[i] if i < len(required_args_lines) else '':<{args_width}}"
+                    f"{optional_args_lines[i] if i < len(optional_args_lines) else '':<{args_width}}"
+                )
+
+            # Add a separator line between queries
+            print("-" * len(header))
+
+        print("\nUsage Example:")
+        print("-------------")
+        print("repo = Neo4jRepository(")
+        print("    uri=<uri>,")
+        print("    username=<user>,")
+        print("    password=<password>,")
+        print("    database=<db>,")
+        print("    schema_yaml=<schema.yaml>")
+        print(")")
+        print()
+        print("result = repo.execute_query(")
+        print("    'query_name',")
+        print("    arg1=<value1>,")
+        print("    arg2=<value2>")
+        print(")")
+        print("result_custom = repo.execute_custom_query_from_yaml(")
+        print("    'yaml_file',")
+        print("    'query_name',")
+        print("    arg1=<value1>,")
+        print("    arg2=<value2>")
+        print(")")
+
 
 # Constraints queries
 @Neo4jQueryRegistry.register_query()
@@ -131,15 +206,20 @@ class CreateUniquenessConstraints(AbstractQuery):
 
     query_name: ClassVar[str] = "create_uniqueness_constraints"
     query_type: ClassVar[str] = "constraints"
-    query: ClassVar[list[str]] = [
-        f"CREATE CONSTRAINT Molecule_gid_unique IF NOT EXISTS FOR (a:{settings.nodes.node_molecule}) REQUIRE a.uid IS UNIQUE;",
-        f"CREATE CONSTRAINT ChemicalEquation_gid_unique IF NOT EXISTS FOR (a:{settings.nodes.node_chemequation}) REQUIRE a.uid IS UNIQUE;",
-    ]
-    is_parameterized = False
+    parameters_embedded = False
     query_args_required: ClassVar[list[str]] = []
     query_args_optional: ClassVar[list[str]] = []
+    query: list[str] = Field(default=None)
+
+    def _build_query(self):
+        self.query = [
+            f"CREATE CONSTRAINT {node_label}_uid_unique IF NOT EXISTS FOR (a:{node_label}) REQUIRE a.uid IS UNIQUE;"
+            for node_label in self.graph_schema.base_nodes.values()
+        ]
 
     def get_query(self) -> list[str]:
+        if self.query is None:
+            self._build_query()
         return self.query
 
 
@@ -149,13 +229,36 @@ class DropUniquenessConstraints(AbstractQuery):
 
     query_name: ClassVar[str] = "drop_uniqueness_constraints"
     query_type: ClassVar[str] = "constraints"
-    is_parameterized = False
-    query: ClassVar[list[str]] = [
-        "DROP CONSTRAINT Molecule_gid_unique",
-        "DROP CONSTRAINT ChemicalEquation_gid_unique",
-    ]
+    parameters_embedded = False
     query_args_required: ClassVar[list[str]] = []
     query_args_optional: ClassVar[list[str]] = []
+    query: list[str] = Field(default=None)
+
+    def _build_query(self):
+        self.query = [
+            f"DROP CONSTRAINT {node_label}_uid_unique"
+            for node_label in self.graph_schema.base_nodes.values()
+        ]
+
+    def get_query(self) -> list[str]:
+        if self.query is None:
+            self._build_query()
+        return self.query
+
+
+@Neo4jQueryRegistry.register_query()
+class ShowUniquenessConstraints(AbstractQuery):
+    """Query to show the uniqueness constraints"""
+
+    query_name: ClassVar[str] = "show_uniqueness_constraints"
+    query_type: ClassVar[str] = "retrieve_stats"
+    parameters_embedded = False
+    query_args_required: ClassVar[list[str]] = []
+    query_args_optional: ClassVar[list[str]] = []
+    query: ClassVar[str] = "SHOW CONSTRAINTS"
+
+    def get_query(self) -> list[str]:
+        return self.query
 
 
 # Read queries
@@ -165,7 +268,7 @@ class GetNode(AbstractQuery):
 
     query_name: ClassVar[str] = "get_node"
     query_type: ClassVar[str] = "retrieve_graph"
-    is_parameterized = False
+    parameters_embedded = False
     query: ClassVar[
         str
     ] = f"MATCH result = (n {{uid:$node_uid}}) RETURN nodes(result) as nodes"
@@ -179,67 +282,219 @@ class GetTree(AbstractQuery):
 
     query_name: ClassVar[str] = "get_tree"
     query_type: ClassVar[str] = "retrieve_graph"
-    is_parameterized = False
-    query: ClassVar[str] = (
-        f"MATCH (start {{uid:$root_node_uid}}) "
-        f"CALL apoc.path.subgraphAll(start, {{ "
-        f"   relationshipFilter: '<PRODUCT,<REACTANT', "
-        f"   minLevel: 0, "
-        f"   maxLevel: $max_level "
-        f"}}) "
-        f"YIELD nodes, relationships "
-        f"RETURN nodes,relationships"
-    )
+    parameters_embedded = False
+    query: str = None
     query_args_required: ClassVar[list[str]] = ["root_node_uid", "max_level"]
     query_args_optional: ClassVar[list[str]] = []
 
+    def _build_query(self):
+        self.query = (
+            f"MATCH (start {{uid:$root_node_uid}}) "
+            f"CALL apoc.path.subgraphAll(start, {{ "
+            f"   relationshipFilter: '<{self.graph_schema.base_relationships['product']['type']},<{self.graph_schema.base_relationships['reactant']['type']}', "
+            f"   minLevel: 0, "
+            f"   maxLevel: $max_level "
+            f"}}) "
+            f"YIELD nodes, relationships "
+            f"RETURN nodes, relationships"
+        )
+
+    def get_query(self) -> str:
+        if self.query is None:
+            self._build_query()
+        return self.query
+
 
 @Neo4jQueryRegistry.register_query()
-class GetRoute(AbstractQuery):
+class GetRoutes(AbstractQuery):
     """Query to retrieve the list of routes for a given Molecule root"""
 
-    query_name: ClassVar[str] = "get_route"
+    query_name: ClassVar[str] = "get_routes"
     query_type: ClassVar[str] = "retrieve_graph"
-    is_parameterized = False
-    query: ClassVar[str] = (
-        f"MATCH (n {{uid:$root_node_uid}}) "
-        f"CALL syngenta.routes.find(n, 'Molecule', 'ChemicalEquation', '<REACTANT', '<PRODUCT', {{maxR:$max_level}}) "
-        f"YIELD relationships "
-        f"WITH relationships, "
-        f"     [ rel in relationships | startNode(rel)] AS startNodes, "
-        f"     [ rel in relationships | endNode(rel)] AS endNodes "
-        f"WITH relationships, startNodes + endNodes AS allNodes "
-        f"RETURN "
-        f"    relationships, "
-        f"    apoc.coll.toSet(allNodes) AS nodes"
-    )
-    query_args_required: ClassVar[list[str]] = ["root_node_uid", "max_level"]
-    query_args_optional: ClassVar[list[str]] = []
+    parameters_embedded = True
+    query: str = None
+    query_args_required: ClassVar[list[str]] = [
+        "root_node_uid",
+    ]
+    query_args_optional: ClassVar[list[str]] = [
+        "max_number_reactions",
+        "node_stop_property",
+    ]
+    root_node_uid: str = Field(default=None)
+    max_number_reactions: int = Field(default=None)
+    node_stop_property: str = Field(default=None)
+
+    def _build_query(self):
+        self.query = (
+            f"MATCH (n {{uid:'{self.root_node_uid}'}}) "
+            f"CALL noctis.route.miner(n, '{self.graph_schema.base_nodes['molecule']}', '{self.graph_schema.base_nodes['chemical_equation']}', '<{self.graph_schema.base_relationships['reactant']['type']}', '<{self.graph_schema.base_relationships['product']['type']}', {self._build_parameters_map()}) "
+            f"YIELD relationships "
+            f"WITH relationships, "
+            f"     [ rel in relationships | startNode(rel)] AS startNodes, "
+            f"     [ rel in relationships | endNode(rel)] AS endNodes "
+            f"WITH relationships, startNodes + endNodes AS allNodes "
+            f"RETURN "
+            f"    relationships, "
+            f"    apoc.coll.toSet(allNodes) AS nodes"
+        )
+
+    def _build_parameters_map(self):
+        parameters = {}
+
+        if self.max_number_reactions is not None:
+            parameters["maxNumberReactions"] = self.max_number_reactions
+
+        if self.node_stop_property is not None:
+            parameters["nodeStopProperty"] = f'"{self.node_stop_property}"'
+
+        # Custom string representation
+        if parameters:
+            items = [f"{k}:{v}" for k, v in parameters.items()]
+            return "{" + ", ".join(items) + "}"
+        else:
+            return "{}"
+
+    def get_query(self) -> list[str]:
+        if self.query is None:
+            self._build_query()
+        return [self.query]
 
 
 @Neo4jQueryRegistry.register_query()
-class CreateAnonymizedUidsOnTree(AbstractQuery):
-    """Query to anonymize a tree"""
+class GetPathsThroughIntermediates(AbstractQuery):
+    """Query to get paths which start with start node and go through provided intermediate nodes"""
 
-    query_name: ClassVar[str] = "create_anonymized_uid_on_tree"
-    query_type: ClassVar[str] = "modify_graph"
-    is_parameterized = False
-    query: ClassVar[str] = (
-        f"MATCH (start {{uid:$root_node_uid}}) "
-        f"CALL apoc.path.subgraphAll(start, {{ "
-        f"   relationshipFilter: '<PRODUCT,<REACTANT', "
-        f"   minLevel: 0, "
-        f"   maxLevel: $max_level "
-        f"}}) "
-        f"YIELD nodes, relationships "
-        f"WITH nodes as nds"
-        f"unwind apoc.coll.zip(range(0, size(nds)),nds) as pair"
-        f"with pair[0] as counter, pair[1] as n"
-        f"set n.nid = counter"
-        f"return n"
-    )
-    query_args_required: ClassVar[list[str]] = ["root_node_uid", "max_level"]
-    query_args_optional: ClassVar[list[str]] = []
+    query_name: ClassVar[str] = "get_paths"
+    query_type: ClassVar[str] = "retrieve_graph"
+    query_args_required: ClassVar[list[str]] = [
+        "start_node_uid",
+    ]
+    query_args_optional: ClassVar[list[str]] = [
+        "intermediates_uids",
+        "max_reactions_between_intermediates",
+        "total_n_reactions",
+        "min_max_n_reactions",
+        "end_at_last_intermediate",
+        "limit",
+    ]
+    parameters_embedded = True
+
+    query: list[str] = Field(default=None)
+    start_node_uid: str = Field(default=None)
+    intermediates_uids: list[str] = Field(default=None)
+    max_reactions_between_intermediates: int = Field(default=None)
+    total_n_reactions: int = Field(default=None)
+    min_max_n_reactions: tuple[Union[None, int], int] = Field(default=None)
+    end_at_last_intermediate: bool = Field(default=True)
+    limit: int = Field(default=None)
+    between_intr_in_rel: int = Field(default=None)
+    total_in_rel: int = Field(default=None)
+    min_max_in_rel: tuple[int, int] = Field(default=None)
+
+    def _build_query(self):
+        query_parts = []
+        where_clauses = []
+
+        # Start node
+        query_parts.append(f"MATCH (start {{uid:'{self.start_node_uid}'}})")
+
+        # Validate path length constraints
+        self._validate_path_length_constraints()
+
+        # Handle intermediates
+        if self.intermediates_uids:
+            query_parts.extend(self._build_intermediates_query())
+        else:
+            query_parts.append(self._build_no_intermediates_query())
+
+        # Add WHERE clauses for path length
+        where_clauses.extend(self._build_path_length_clauses())
+
+        # Combine all parts
+        built_query = " ".join(part for part in query_parts)
+
+        if where_clauses:
+            built_query += f" WHERE {' AND '.join(where_clauses)}"
+        built_query += " RETURN p"
+
+        if self.limit is not None:
+            built_query += f" LIMIT {self.limit}"
+
+        self.query = built_query
+
+        return
+
+    def _calculate_in_rel_values(self):
+        self.between_intr_in_rel = self.max_reactions_between_intermediates * 2
+        if self.total_n_reactions is not None:
+            self.total_in_rel = self.total_n_reactions * 2
+        if self.min_max_n_reactions is not None:
+            min_steps, max_steps = self.min_max_n_reactions
+            self.min_max_in_rel = (min_steps * 2, max_steps * 2)
+
+    def _validate_path_length_constraints(self):
+        if self.total_n_reactions is not None and self.min_max_n_reactions is not None:
+            raise ValueError(
+                "total_n_reactions and min_max_n_reactions cannot be used together"
+            )
+
+        if self.min_max_n_reactions is not None:
+            min_steps, max_steps = self.min_max_n_reactions
+            if min_steps is not None:
+                if min_steps >= max_steps:
+                    raise ValueError("min_steps must be less than max_steps")
+            else:
+                if self.intermediates_uids is not None:
+                    min_steps = len(self.intermediates_uids)
+                else:
+                    min_steps = 1
+                self.min_max_n_reactions = (min_steps, max_steps)
+        if self.max_reactions_between_intermediates is None:
+            if self.total_n_reactions is not None:
+                self.max_reactions_between_intermediates = self.total_n_reactions
+            else:
+                self.max_reactions_between_intermediates = 3
+
+        self._calculate_in_rel_values()
+
+    def _build_intermediates_query(self):
+        parts = []
+        for i, intermediate in enumerate(self.intermediates_uids):
+            parts.append(f"MATCH (intrm{i} {{uid: '{intermediate}'}})")
+
+        path = "MATCH p=(start)"
+        for i in range(len(self.intermediates_uids)):
+            path += f"<-[*2..{self.between_intr_in_rel}]-(intrm{i})"
+
+        if not self.end_at_last_intermediate:
+            path += f"<-[*2..{self.between_intr_in_rel}]-()"
+
+        parts.append(path)
+        return parts
+
+    def _build_no_intermediates_query(self) -> str:
+        if self.min_max_n_reactions is not None:
+            min_steps, max_steps = self.min_max_in_rel
+            return f"MATCH p=(start)<-[*{min_steps}..{max_steps}]-(:{self.graph_schema.base_nodes['molecule']})"
+        elif self.total_n_reactions is not None:
+            return f"MATCH p=(start)<-[*{self.total_in_rel}]-(:{self.graph_schema.base_nodes['molecule']})"
+        else:
+            return f"MATCH p=(start)<-[*]-(:{self.graph_schema['molecule']})"
+
+    def _build_path_length_clauses(self):
+        clauses = []
+        if self.total_n_reactions is not None:
+            clauses.append(f"length(p) = {self.total_in_rel}")
+        elif self.min_max_n_reactions is not None:
+            min_steps, max_steps = self.min_max_in_rel
+            clauses.append(f"length(p) >= {min_steps}")
+            clauses.append(f"length(p) <= {max_steps}")
+        return clauses
+
+    def get_query(self) -> list[str]:
+        if self.query is None:
+            self._build_query()
+        return [self.query]
 
 
 # Write queries
@@ -259,7 +514,7 @@ class AddNodesAndRelationships(AbstractQuery):
         "validation",
         "graph_schema",
     ]
-    is_parameterized = True
+    parameters_embedded = True
 
     query: list[str] = Field(default=None)
     data: Union[list[str], list[SynGraph], DataContainer, pd.DataFrame] = Field(
@@ -269,22 +524,18 @@ class AddNodesAndRelationships(AbstractQuery):
     input_chem_format: str = Field(default=None)
     output_chem_format: str = Field(default=None)
     validation: bool = Field(default=None)
-    graph_schema: GraphSchema = Field(default=None)
 
     def _build_query(self) -> None:
         data_container = self.data
         if self.data_type != "data_container":
-            config = PreprocessorConfig(
-                inp_chem_format=self.input_chem_format,
-                out_chem_format=self.output_chem_format,
-                validation=self.validation,
-            )
             data_container = Preprocessor(
                 self.graph_schema
             ).preprocess_object_for_neo4j(
                 data=self.data,
                 data_type=self.data_type,
-                config=config,
+                inp_chem_format=self.input_chem_format,
+                out_chem_format=self.output_chem_format,
+                validation=self.validation,
             )
         self.query = _convert_datacontainer_to_query(data_container)
 
@@ -300,22 +551,34 @@ class LoadNodesFromCsv(AbstractQuery):
 
     query_name: ClassVar[str] = "load_nodes_from_csv"
     query_type: ClassVar[str] = "modify_graph"
-    is_parameterized = True
+    parameters_embedded = True
     query_args_required: ClassVar[list[str]] = ["file_path"]
-    query_args_optional: ClassVar[list[str]] = ["batch_size", "field_terminator"]
+    query_args_optional: ClassVar[list[str]] = [
+        "batch_size",
+        "field_terminator",
+        "import_from_file_system",
+    ]
 
     query: list[str] = Field(default=None)
     file_path: Union[str, Path] = Field(default=None)
     batch_size: int = Field(default=100)
     field_terminator: str = Field(default=",")
+    import_from_file_system: bool = Field(default=True)
 
     def _build_query(self) -> None:
-        list_of_properties = _get_dict_keys_from_csv(self.file_path)
+        abs_path = os.path.abspath(self.file_path)
+        if self.import_from_file_system:
+            file_url = f"file:///{quote(abs_path.replace(os.sep, '/'))}"
+        else:
+            file_name = os.path.basename(abs_path)
+            file_url = f"file:///{file_name}"
+
+        list_of_properties = _get_dict_keys_from_csv(abs_path)
         properties_part = _generate_properties_assignment(list_of_properties)
 
         query = f"""
         CALL apoc.periodic.iterate(
-            'LOAD CSV WITH HEADERS FROM "{self.file_path}" AS row FIELDTERMINATOR "{self.field_terminator}" RETURN row',
+            'LOAD CSV WITH HEADERS FROM "{file_url}" AS row FIELDTERMINATOR "{self.field_terminator}" RETURN row',
             'CALL apoc.merge.node([row.{Neo4jLoadStyle.COLUMN_NAMES_NODES['node_label']}], {{{Neo4jLoadStyle.COLUMN_NAMES_NODES['uid']}:row.{Neo4jLoadStyle.COLUMN_NAMES_NODES['uid']}, {properties_part} }}) YIELD node RETURN count(node) as cn',
             {{batchSize: {self.batch_size}, parallel: false}}
         )
@@ -334,19 +597,31 @@ class LoadRelationshipsFromCsv(AbstractQuery):
 
     query_name: ClassVar[str] = "load_relationships_from_csv"
     query_type: ClassVar[str] = "modify_graph"
-    is_parameterized = True
+    parameters_embedded = True
     query_args_required: ClassVar[list[str]] = ["file_path"]
-    query_args_optional: ClassVar[list[str]] = ["batch_size", "field_terminator"]
+    query_args_optional: ClassVar[list[str]] = [
+        "batch_size",
+        "field_terminator",
+        "import_from_file_system",
+    ]
 
     query: list[str] = Field(default=None)
     file_path: Union[str, Path] = Field(default=None)
     batch_size: int = Field(default=100)
     field_terminator: str = Field(default=",")
+    import_from_file_system: bool = Field(default=True)
 
     def _build_query(self) -> None:
+        abs_path = os.path.abspath(self.file_path)
+        if self.import_from_file_system:
+            file_url = f"file:///{quote(abs_path.replace(os.sep, '/'))}"
+        else:
+            file_name = os.path.basename(abs_path)
+            file_url = f"file:///{file_name}"
+
         query = f"""
          CALL apoc.periodic.iterate(
-            'LOAD CSV WITH HEADERS FROM "{self.file_path}" AS row FIELDTERMINATOR "{self.field_terminator}" RETURN row',
+            'LOAD CSV WITH HEADERS FROM "{file_url}" AS row FIELDTERMINATOR "{self.field_terminator}" RETURN row',
             'MATCH (sourceNode {{{Neo4jLoadStyle.COLUMN_NAMES_NODES['uid']}: row.{Neo4jLoadStyle.COLUMN_NAMES_RELATIONSHIPS['start_node']}}})
              MATCH (destinationNode {{{Neo4jLoadStyle.COLUMN_NAMES_NODES['uid']}: row.{Neo4jLoadStyle.COLUMN_NAMES_RELATIONSHIPS['end_node']}}})
              CALL apoc.merge.relationship(sourceNode, row.{Neo4jLoadStyle.COLUMN_NAMES_RELATIONSHIPS['relationship_type']}, {{}},{{}} ,destinationNode) YIELD rel
@@ -369,26 +644,34 @@ class ImportDbFromCsv(AbstractQuery):
 
     query_name: ClassVar[str] = "import_db_from_csv"
     query_type: ClassVar[str] = "modify_graph"
-    is_parameterized = True
-    query_args_required: ClassVar[list[str]] = [
-        "prefix_nodes",
+    parameters_embedded = True
+    query_args_required: ClassVar[list[str]] = []
+    query_args_optional: ClassVar[list[str]] = [
+        "folder_path",
+        "prefix",
+        "delimiter",
         "nodes_labels",
-        "prefix_relationships",
         "relationships_types",
     ]
-    query_args_optional: ClassVar[list[str]] = ["delimiter"]
 
     query: list[str] = Field(default=None)
-    prefix_nodes: str = Field(default=None)
+    prefix: str = Field(default=None)
     nodes_labels: list[str] = Field(default_factory=list)
-    prefix_relationships: str = Field(default=None)
     relationships_types: list[str] = Field(default_factory=list)
     delimiter: str = Field(default=",")
+    folder_path: str = Field(default=None)
 
     def _build_query(self) -> None:
-        nodes_files = _generate_nodes_files_string(self.prefix_nodes, self.nodes_labels)
+        if not self.nodes_labels:
+            self.nodes_labels = self.graph_schema.get_nodes_labels()
+        if not self.relationships_types:
+            self.relationships_types = self.graph_schema.get_relationships_types()
+
+        nodes_files = _generate_nodes_files_string(
+            self.folder_path, self.prefix, self.nodes_labels
+        )
         relationships_files = _generate_relationships_files_string(
-            self.prefix_relationships, self.relationships_types
+            self.folder_path, self.prefix, self.relationships_types
         )
 
         query_import = f"""CALL apoc.import.csv([{nodes_files}],[{relationships_files}], {{delimiter:'{self.delimiter}', stringIds: true,
@@ -413,31 +696,28 @@ class ImportDbFromCsv(AbstractQuery):
 class DeleteAllNodes(AbstractQuery):
     """Query to delete ChemicalEquation nodes based on the number of a particular relationship type"""
 
-    query_name: ClassVar[str] = "remove_all_nodes"
+    query_name: ClassVar[str] = "delete_all_nodes"
     query_type: ClassVar[str] = "modify_graph"
-    is_parameterized = False
+    parameters_embedded = False
     query_args_required: ClassVar[list[str]] = []
     query_args_optional: ClassVar[list[str]] = []
     query: ClassVar[str] = f"MATCH (c)" f"detach delete c "
 
 
 @Neo4jQueryRegistry.register_query()
-class DeleteChemicalEquationNodes(AbstractQuery):
+class GetGDBSchema(AbstractQuery):
     """Query to delete ChemicalEquation nodes based on the number of a particular relationship type"""
 
-    query_name: ClassVar[str] = "remove_ce_nodes"
-    query_type: ClassVar[str] = "modify_graph"
-    is_parameterized = False
-    query_args_required: ClassVar[list[str]] = [
-        "relationship_type",
-        "max_relationships",
-    ]
+    query_name: ClassVar[str] = "get_gdb_schema"
+    query_type: ClassVar[str] = "retrieve_stats"
+    parameters_embedded = False
+    query_args_required: ClassVar[list[str]] = []
     query_args_optional: ClassVar[list[str]] = []
     query: ClassVar[str] = (
-        f"MATCH (c:{settings.nodes.node_chemequation})<-[r:$relationship_type]-(p) "
-        f"WITH c, count(r) AS molCount "
-        f"where molCount > $max_relationships "
-        f"detach delete c "
+        f"call db.labels() yield label "
+        f"with collect(label) as nodes "
+        f"call db.relationshipTypes() yield relationshipType "
+        f"return nodes, collect(relationshipType) as relationships"
     )
 
 
@@ -446,10 +726,11 @@ class CustomQuery(BaseModel):
 
     query_name: str
     query_type: str = Field(default="retrieve_stats")
-    is_parameterized: ClassVar[bool] = False
+    parameters_embedded: ClassVar[bool] = False
     query: Union[str, list[str]]
     query_args_required: list[str] = Field(default_factory=list)
     query_args_optional: list[str] = Field(default_factory=list)
+    graph_schema: GraphSchema = Field(default=None)
 
     @model_validator(mode="before")
     @classmethod
@@ -465,11 +746,11 @@ class CustomQuery(BaseModel):
     @classmethod
     def build_from_dict(cls, query_dict: dict) -> "CustomQuery":
         """Build a CustomQuery instance from a dictionary"""
-        if query_dict.get("is_parameterized") is True:
+        if query_dict.get("parameters_embedded") is True:
             logger.warning(
-                f"'is_parameterized' is set to True, but it will be ignored and set to False."
+                f"'parameters_embedded' is set to True, but it will be ignored and set to False."
             )
-            query_dict["is_parameterized"] = False
+            query_dict["parameters_embedded"] = False
         return cls(**query_dict)
 
     @classmethod

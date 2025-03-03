@@ -21,7 +21,9 @@ Contents
 .. toctree::
    :maxdepth: 1
 
-   Installation
+   pages/installation
+   pages/configuration
+
    reference/index
 
 Indices and tables

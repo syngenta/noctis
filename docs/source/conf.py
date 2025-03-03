@@ -32,7 +32,7 @@ release = version.replace("_", "")
 
 html_theme = "bizstyle"
 html_static_path = ["static"]
-# html_logo = "static/logo.png"
+html_logo = "static/logo.png"
 
 
 html_sidebars = {

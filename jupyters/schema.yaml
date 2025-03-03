@@ -1,0 +1,12 @@
+base_nodes:
+  chemical_equation: "ChemicalEquation"
+  molecule: "Molecule"
+base_relationships:
+  product:
+    type: "PRODUCT"
+    start_node: "chemical_equation"
+    end_node: "molecule"
+  reactant:
+    type: "REACTANT"
+    start_node: "molecule"
+    end_node: "chemical_equation"

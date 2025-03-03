@@ -6,7 +6,7 @@ from noctis.data_transformation.preprocessing.core_graph_builder import (
     build_core_graph,
     NoneChemicalEquation,
 )
-from noctis.data_transformation.preprocessing.utils import (
+from noctis.data_transformation.preprocessing.utilities import (
     explode_smiles_like_reaction_string,
     explode_v3000_reaction_string,
 )

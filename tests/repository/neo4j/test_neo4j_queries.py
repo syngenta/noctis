@@ -17,7 +17,7 @@ class TestAbstractQuery(unittest.TestCase):
         class TestQuery(AbstractQuery):
             query_name: ClassVar[str] = "test_query"
             query_type: ClassVar[str] = "test"
-            is_parameterized: ClassVar[bool] = False
+            parameters_embedded: ClassVar[bool] = False
             query_args_required: ClassVar[list[str]] = ["arg1", "arg2"]
             query_args_optional: ClassVar[list[str]] = ["arg3"]
             query: str = "TEST QUERY"
@@ -27,7 +27,7 @@ class TestAbstractQuery(unittest.TestCase):
     def test_class_variables(self):
         self.assertEqual(self.TestQuery.query_name, "test_query")
         self.assertEqual(self.TestQuery.query_type, "test")
-        self.assertFalse(self.TestQuery.is_parameterized)
+        self.assertFalse(self.TestQuery.parameters_embedded)
         self.assertEqual(self.TestQuery.query_args_required, ["arg1", "arg2"])
         self.assertEqual(self.TestQuery.query_args_optional, ["arg3"])
 
@@ -78,7 +78,7 @@ class TestAbstractQuery(unittest.TestCase):
         class NoArgsQuery(AbstractQuery):
             query_name: ClassVar[str] = "no_args_query"
             query_type: ClassVar[str] = "test"
-            is_parameterized: ClassVar[bool] = False
+            parameters_embedded: ClassVar[bool] = False
             query_args_required: ClassVar[list] = []
             query_args_optional: ClassVar[list] = []
             query: ClassVar[str] = "NO ARGS QUERY"
@@ -90,7 +90,7 @@ class TestAbstractQuery(unittest.TestCase):
         class OptionalArgsQuery(AbstractQuery):
             query_name: ClassVar[str] = "optional_args_query"
             query_type: ClassVar[str] = "test"
-            is_parameterized: ClassVar[bool] = False
+            parameters_embedded: ClassVar[bool] = False
             query_args_required: ClassVar[list[str]] = []
             query_args_optional: ClassVar[list[str]] = ["opt1", "opt2"]
             query: ClassVar[str] = "OPTIONAL ARGS QUERY"
@@ -105,7 +105,7 @@ class TestAbstractQuery(unittest.TestCase):
         class ParameterizedQuery(AbstractQuery):
             query_name: ClassVar[str] = "parameterized_query"
             query_type: ClassVar[str] = "test"
-            is_parameterized: ClassVar[bool] = True
+            parameters_embedded: ClassVar[bool] = True
             query_args_required: ClassVar[list[str]] = ["param1"]
             query_args_optional: ClassVar[list[str]] = []
             query: ClassVar[str] = "PARAMETERIZED QUERY WITH {param1}"
@@ -187,7 +187,7 @@ class TestCustomQuery(unittest.TestCase):
 
         - query_name: get_tree
           query_type: retrieve_graph
-          is_parameterized: false
+          parameters_embedded: false
           query_args_required:
             - root_node_uid
           query_args_optional:
@@ -204,7 +204,7 @@ class TestCustomQuery(unittest.TestCase):
 
         - query_name: get_node_by_id
           query_type: retrieve_graph
-          is_parameterized: false
+          parameters_embedded: false
           query_args_required:
             - node_id
           query: |

@@ -1,13 +1,17 @@
 import pandas as pd
 import warnings
+import ast
 
-from noctis.data_architecture.datamodel import DataContainer, GraphRecord, Node
+from noctis.data_architecture.datamodel import GraphRecord
+from noctis.data_architecture.datacontainer import DataContainer
+from pathlib import Path
+from typing import Union, List
 
 
 def _convert_datacontainer_to_query(data_container: DataContainer) -> list[str]:
     """To convert a DataContainer into a query string"""
     queries = []
-    for record in data_container.records.values():
+    for record in data_container.records:
         queries.extend(_convert_record_to_query_neo4j(record))
     return queries
 
@@ -53,7 +57,7 @@ def _get_dict_keys_from_csv(csv_file_path):
     df = pd.read_csv(csv_file_path)
 
     # Extract the "properties" column
-    properties_series = df["properties"]
+    properties_series = df["properties"].apply(ast.literal_eval)
 
     # Get the keys of the dictionaries
     all_keys = [list(d.keys()) for d in properties_series]
@@ -71,25 +75,86 @@ def _get_dict_keys_from_csv(csv_file_path):
     return list(unique_keys)
 
 
-# problem with apoc.import.csv -- it creates, not merges. if you try to add nodes which are already in the DB
-# it will crush. For merging one can use only load csv
+def _create_neo4j_import_path(directory: Union[str, Path], file_name: str) -> str:
+    """
+    Combines the directory and file name into an absolute file path and converts it into
+    a file URI suitable for use in a Cypher LOAD CSV command.
+
+    Parameters:
+        directory (Union[str, Path]): The directory containing the file.
+        file_name (str): The name of the file.
+
+    Returns:
+        str: The file URI that can be fed into a Cypher command.
+    """
+    file_path = Path(directory) / file_name
+    return file_path.resolve().as_uri()
 
 
-def _generate_nodes_files_string(prefix_nodes: str, nodes_labels: list[str]) -> str:
+def _generate_files_string(
+    folder_path: Union[str, Path, None],
+    prefix: Union[str, None],
+    items: List[str],
+    item_type: str,
+) -> str:
+    """
+    Generates a string of file descriptors for nodes or relationships.
+
+    Parameters:
+        folder_path (Union[str, Path, None]): The path to the folder containing the CSV files.
+        prefix (Union[str, None]): The prefix to be added to the CSV file names.
+        items (List[str]): The list of node labels or relationship types.
+        item_type (str): Either 'labels' or 'types' to specify whether we're dealing with nodes or relationships.
+
+    Returns:
+        str: A string of file descriptors joined by commas.
+    """
     query = []
-    for label in nodes_labels:
-        query.append(
-            f"{{fileName:'file:/{prefix_nodes +'_'+ label.upper() + '.csv'}', labels:[]}}"
-        )
+    for item in items:
+        csv_name = f"{prefix + '_' if prefix else ''}{item.upper()}.csv"
+        if not folder_path:
+            file_uri = f"file:/{csv_name}"
+        else:
+            file_uri = _create_neo4j_import_path(folder_path, csv_name)
+        query.append(f"{{fileName:'{file_uri}', {item_type}:[]}}")
     return ", ".join(query)
+
+
+def _generate_nodes_files_string(
+    folder_path: Union[str, Path, None],
+    prefix_nodes: Union[str, None],
+    nodes_labels: List[str],
+) -> str:
+    """
+    Generates a string of file descriptors for nodes.
+
+    Parameters:
+        folder_path (Union[str, Path, None]): The path to the folder containing the CSV files.
+        prefix_nodes (Union[str, None]): The prefix to be added to the node CSV file names.
+        nodes_labels (List[str]): The list of node labels.
+
+    Returns:
+        str: A string of file descriptors for nodes joined by commas.
+    """
+    return _generate_files_string(folder_path, prefix_nodes, nodes_labels, "labels")
 
 
 def _generate_relationships_files_string(
-    prefix_relationships: str, relationships_types: list[str]
+    folder_path: Union[str, Path, None],
+    prefix_relationships: Union[str, None],
+    relationships_types: List[str],
 ) -> str:
-    query = []
-    for rtype in relationships_types:
-        query.append(
-            f"{{fileName:'file:/{prefix_relationships +'_' + rtype.upper() + '.csv'}', types:[]}}"
-        )
-    return ", ".join(query)
+    """
+    Generates a string of file descriptors for relationships.
+
+    Parameters:
+        folder_path (Union[str, Path, None]): The path to the folder containing the CSV files.
+        prefix_relationships (Union[str, None]): The prefix to be added to the relationship CSV file names.
+        relationships_types (List[str]): The list of relationship types.
+
+    Returns:
+        str: A string of file descriptors for relationships joined by commas.
+    """
+    return _generate_files_string(
+        folder_path, prefix_relationships, relationships_types, "types"
+    )

@@ -1,10 +1,6 @@
 import pytest
 from pydantic import ValidationError
-from noctis.data_architecture.graph_schema import (
-    GraphSchema,
-    GraphSchemaValidationError,
-)
-from noctis import settings
+from noctis.data_architecture.graph_schema import GraphSchema
 
 
 def test_graph_schema_default_initialization():
