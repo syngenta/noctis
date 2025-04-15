@@ -51,7 +51,7 @@ It allows you to build and explore complex reaction networks — beyond just mol
 To learn more, visit the `documentation <https://noctis.readthedocs.io/>`_.
 
 Try it interactively with our example notebook!
-📓 `Example Notebooks <https://github.com/syngenta/noctis/tree/main/jupyters>`_
+📓 `Example Notebook <https://github.com/syngenta/noctis/tree/main/jupyters>`_
 
 Installation
 ------------
