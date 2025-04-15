@@ -1,4 +1,4 @@
-noctis
+⭒˚.⋆ NOCTIS ⭒˚.⋆
 =======================================
 
 .. image:: https://img.shields.io/pypi/v/noctis
@@ -25,7 +25,33 @@ noctis
 
 ---------------------
 
+.. image:: docs/source/static/noctis.png
+   :alt: Noctis Logo
+   :align: center
+   :width: 250px
 
+What is Noctis?
+---------------
+
+**NOCTIS** is a Python package for modeling and analyzing chemical reaction data as graph structures.
+
+It allows you to build and explore complex reaction networks — beyond just molecules and chemical equations — by supporting additional node types, metadata, and relationships.
+
+**NOCTIS** provides tools to:
+
+- Preprocess and validate chemical reaction datasets
+- Build graph representations from reaction data
+- Query and navigate reaction networks
+- Mine synthesis routes using a custom `Java plugin <https://github.com/syngenta/noctis-route-miner>`_
+- Interact programmatically with graph databases
+- Transform query results into formats suitable for further analysis (e.g., NetworkX, Pandas)
+
+
+
+To learn more, visit the `documentation <https://noctis.readthedocs.io/>`_.
+
+Try it interactively with our example notebook!
+📓 `Example Notebooks <https://github.com/syngenta/noctis/tree/main/jupyters>`_
 
 Installation
 ------------
@@ -37,8 +63,7 @@ Create a dedicated Python environment for this package with your favorite enviro
    conda create -n noctis python=3.9
    conda activate noctis
 
-
-* Option 1: Install the package from the github repository:
+* Option 1: Install the package from the GitHub repository:
 
 .. code-block:: shell
 
@@ -50,34 +75,30 @@ Create a dedicated Python environment for this package with your favorite enviro
 
    pip install noctis
 
-
 Configuration
 -------------
-This package requires some configuration parameters to work,
-including some secretes to store access credentials to database and services.
 
-After installation, and before the first usage, the use should run the following command
+This package requires some configuration parameters to work,
+including some secrets to store access credentials to database and services.
+
+After installation, and before the first usage, run the following command:
 
 .. code-block:: shell
 
     noctis_configure
-..
 
-| This command generates the <home>/noctis directory and places into it two files:
+This command creates a `<home>/noctis` directory and places into it:
 
-1. settings.yaml populated with defaults settings. The user can review and modify these values if necessary.
-2. .secrets.yaml containing the keys for the necessary secrets. The user must replace the placeholders with the correct values
-3. schema.yaml a description of the schema used in the database
+1. `settings.yaml` – populated with default settings. You can review and modify them.
+2. `.secrets.yaml` – contains placeholders for secrets. Fill them with your actual values.
+3. `schema.yaml` – a description of the graph schema used in the database.
 
-| For more details please refer to the Configuration section of the documentation
-
+🔧 For more details, refer to the **Configuration** section of the documentation.
 
 Development Installation
 ---------------------------
 
-When working on the development of this package, the developer wants to work
-directly on the source code while still using the packaged installation. For
-that, run:
+If you're working on the development of Noctis and want to run directly from source:
 
 .. code-block:: shell
 
