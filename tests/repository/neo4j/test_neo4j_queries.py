@@ -189,11 +189,11 @@ class TestCustomQuery(unittest.TestCase):
           query_type: retrieve_graph
           parameters_embedded: false
           query_args_required:
-            - root_node_uid
+            - root_match_value
           query_args_optional:
             - max_level
           query: |
-            MATCH (start {uid:$root_node_uid})
+            MATCH (start {uid:$root_match_value})
             CALL apoc.path.subgraphAll(start, {
               relationshipFilter: '<PRODUCT,<REACTANT',
               minLevel: 0,
@@ -258,8 +258,8 @@ class TestCustomQuery(unittest.TestCase):
         query = CustomQuery.from_yaml(self.yaml_file, "get_tree")
         self.assertEqual(query.query_name, "get_tree")
         self.assertEqual(query.query_type, "retrieve_graph")
-        self.assertIn("MATCH (start {uid:$root_node_uid})", query.query)
-        self.assertEqual(query.query_args_required, ["root_node_uid"])
+        self.assertIn("MATCH (start {uid:$root_match_value})", query.query)
+        self.assertEqual(query.query_args_required, ["root_match_value"])
         self.assertEqual(query.query_args_optional, ["max_level"])
 
     def test_from_yaml_not_found(self):
@@ -281,19 +281,19 @@ class TestCustomQuery(unittest.TestCase):
         query = CustomQuery.from_yaml(self.yaml_file, "get_tree")
 
         # Valid args
-        query.validate_query_kwargs({"root_node_uid": "value", "max_level": 3})
+        query.validate_query_kwargs({"root_match_value": "value", "max_level": 3})
 
         # Missing required arg
         with self.assertRaises(ValueError) as context:
             query.validate_query_kwargs({"max_level": 3})
         self.assertIn(
-            "Missing required arguments: root_node_uid", str(context.exception)
+            "Missing required arguments: root_match_value", str(context.exception)
         )
 
         # Invalid arg
         with self.assertRaises(ValueError) as context:
             query.validate_query_kwargs(
-                {"root_node_uid": "value", "invalid_arg": "value"}
+                {"root_match_value": "value", "invalid_arg": "value"}
             )
         self.assertIn("Invalid arguments provided: invalid_arg", str(context.exception))
 

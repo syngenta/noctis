@@ -94,6 +94,44 @@ class AbstractQuery(BaseModel):
 
 
 class Neo4jQueryRegistry:
+    """
+    A registry for managing and accessing Neo4j query classes.
+
+    This class provides a centralized mechanism for registering, retrieving, and listing
+    query classes that extend AbstractQuery. It uses a class decorator pattern for
+    automatic registration of query classes and offers methods to access and display
+    information about registered queries.
+
+    Attributes:
+        queries (dict): A dictionary storing registered query classes, keyed by query name.
+
+    Class Methods:
+        register_query(): A decorator for registering new query classes.
+        get_query_object(query_name: str): Retrieves a specific query class by name.
+        get_all_queries(): Returns a set of all registered query names.
+        info(): Prints detailed information about all registered queries.
+
+    Usage:
+        To register a new query class:
+        @Neo4jQueryRegistry.register_query()
+        class MyNewQuery(AbstractQuery):
+            ...
+
+        To retrieve a query class:
+        query_class = Neo4jQueryRegistry.get_query_object("my_query_name")
+
+        To get all registered query names:
+        all_queries = Neo4jQueryRegistry.get_all_queries()
+
+        To display information about all queries:
+        Neo4jQueryRegistry.info()
+
+    Note:
+        This class is designed to work with query classes that inherit from AbstractQuery.
+        It assumes that registered classes have certain attributes like query_name,
+        query_type, and methods like list_arguments().
+    """
+
     queries: dict = {}
 
     @classmethod
@@ -264,16 +302,23 @@ class ShowUniquenessConstraints(AbstractQuery):
 # Read queries
 @Neo4jQueryRegistry.register_query()
 class GetNode(AbstractQuery):
-    """Query to retrieve a node based on its uid"""
+    """Query to retrieve a node based on its uid or other properties"""
 
     query_name: ClassVar[str] = "get_node"
     query_type: ClassVar[str] = "retrieve_graph"
+    match_property: str = Field(default="uid")
     parameters_embedded = False
-    query: ClassVar[
-        str
-    ] = f"MATCH result = (n {{uid:$node_uid}}) RETURN nodes(result) as nodes"
-    query_args_required: ClassVar[list[str]] = ["node_uid"]
-    query_args_optional: ClassVar[list[str]] = []
+    query: str = None
+    query_args_required: ClassVar[list[str]] = ["match_value"]
+    query_args_optional: ClassVar[list[str]] = ["match_property"]
+
+    def _build_query(self):
+        self.query = f"MATCH result = (n {{ {self.match_property}:$match_value}}) RETURN nodes(result) as nodes"
+
+    def get_query(self) -> str:
+        if self.query is None:
+            self._build_query()
+        return self.query
 
 
 @Neo4jQueryRegistry.register_query()
@@ -284,12 +329,13 @@ class GetTree(AbstractQuery):
     query_type: ClassVar[str] = "retrieve_graph"
     parameters_embedded = False
     query: str = None
-    query_args_required: ClassVar[list[str]] = ["root_node_uid", "max_level"]
-    query_args_optional: ClassVar[list[str]] = []
+    query_args_required: ClassVar[list[str]] = ["root_match_value", "max_level"]
+    query_args_optional: ClassVar[list[str]] = ["match_property"]
+    match_property: str = Field(default="uid")
 
     def _build_query(self):
         self.query = (
-            f"MATCH (start {{uid:$root_node_uid}}) "
+            f"MATCH (start {{ {self.match_property}:$root_match_value}}) "
             f"CALL apoc.path.subgraphAll(start, {{ "
             f"   relationshipFilter: '<{self.graph_schema.base_relationships['product']['type']},<{self.graph_schema.base_relationships['reactant']['type']}', "
             f"   minLevel: 0, "
@@ -314,19 +360,21 @@ class GetRoutes(AbstractQuery):
     parameters_embedded = True
     query: str = None
     query_args_required: ClassVar[list[str]] = [
-        "root_node_uid",
+        "root_match_value",
     ]
     query_args_optional: ClassVar[list[str]] = [
         "max_number_reactions",
         "node_stop_property",
+        "match_property",
     ]
-    root_node_uid: str = Field(default=None)
+    root_match_value: str = Field(default=None)
     max_number_reactions: int = Field(default=None)
     node_stop_property: str = Field(default=None)
+    match_property: str = Field(default="uid")
 
     def _build_query(self):
         self.query = (
-            f"MATCH (n {{uid:'{self.root_node_uid}'}}) "
+            f"MATCH (n {{{self.match_property}:'{self.root_match_value}'}}) "
             f"CALL noctis.route.miner(n, '{self.graph_schema.base_nodes['molecule']}', '{self.graph_schema.base_nodes['chemical_equation']}', '<{self.graph_schema.base_relationships['reactant']['type']}', '<{self.graph_schema.base_relationships['product']['type']}', {self._build_parameters_map()}) "
             f"YIELD relationships "
             f"WITH relationships, "
@@ -367,21 +415,22 @@ class GetPathsThroughIntermediates(AbstractQuery):
     query_name: ClassVar[str] = "get_paths"
     query_type: ClassVar[str] = "retrieve_graph"
     query_args_required: ClassVar[list[str]] = [
-        "start_node_uid",
+        "start_match_value",
     ]
     query_args_optional: ClassVar[list[str]] = [
-        "intermediates_uids",
+        "intermediates",
         "max_reactions_between_intermediates",
         "total_n_reactions",
         "min_max_n_reactions",
         "end_at_last_intermediate",
         "limit",
+        "match_property",
     ]
     parameters_embedded = True
 
     query: list[str] = Field(default=None)
-    start_node_uid: str = Field(default=None)
-    intermediates_uids: list[str] = Field(default=None)
+    start_match_value: str = Field(default=None)
+    intermediates: list[str] = Field(default=None)
     max_reactions_between_intermediates: int = Field(default=None)
     total_n_reactions: int = Field(default=None)
     min_max_n_reactions: tuple[Union[None, int], int] = Field(default=None)
@@ -390,19 +439,21 @@ class GetPathsThroughIntermediates(AbstractQuery):
     between_intr_in_rel: int = Field(default=None)
     total_in_rel: int = Field(default=None)
     min_max_in_rel: tuple[int, int] = Field(default=None)
+    match_property: str = Field(default="uid")
 
     def _build_query(self):
         query_parts = []
         where_clauses = []
-
         # Start node
-        query_parts.append(f"MATCH (start {{uid:'{self.start_node_uid}'}})")
+        query_parts.append(
+            f"MATCH (start {{{self.match_property}:'{self.start_match_value}'}})"
+        )
 
         # Validate path length constraints
         self._validate_path_length_constraints()
 
         # Handle intermediates
-        if self.intermediates_uids:
+        if self.intermediates:
             query_parts.extend(self._build_intermediates_query())
         else:
             query_parts.append(self._build_no_intermediates_query())
@@ -444,8 +495,8 @@ class GetPathsThroughIntermediates(AbstractQuery):
                 if min_steps >= max_steps:
                     raise ValueError("min_steps must be less than max_steps")
             else:
-                if self.intermediates_uids is not None:
-                    min_steps = len(self.intermediates_uids)
+                if self.intermediates is not None:
+                    min_steps = len(self.intermediates)
                 else:
                     min_steps = 1
                 self.min_max_n_reactions = (min_steps, max_steps)
@@ -459,11 +510,13 @@ class GetPathsThroughIntermediates(AbstractQuery):
 
     def _build_intermediates_query(self):
         parts = []
-        for i, intermediate in enumerate(self.intermediates_uids):
-            parts.append(f"MATCH (intrm{i} {{uid: '{intermediate}'}})")
+        for i, intermediate in enumerate(self.intermediates):
+            parts.append(
+                f"MATCH (intrm{i} {{{self.match_property}: '{intermediate}'}})"
+            )
 
         path = "MATCH p=(start)"
-        for i in range(len(self.intermediates_uids)):
+        for i in range(len(self.intermediates)):
             path += f"<-[*2..{self.between_intr_in_rel}]-(intrm{i})"
 
         if not self.end_at_last_intermediate:
@@ -700,8 +753,25 @@ class DeleteAllNodes(AbstractQuery):
     query_type: ClassVar[str] = "modify_graph"
     parameters_embedded = False
     query_args_required: ClassVar[list[str]] = []
-    query_args_optional: ClassVar[list[str]] = []
-    query: ClassVar[str] = f"MATCH (c)" f"detach delete c "
+    query_args_optional: ClassVar[list[str]] = ["batch_size"]
+    batch_size: int = Field(default=1000)
+    query: str = Field(default=None)
+
+    def _build_query(self):
+        self.query = f"""
+    CALL apoc.periodic.iterate(
+        'MATCH (n) RETURN n',
+        'DETACH DELETE n',
+        {{batchSize:{self.batch_size}}}
+    )
+    YIELD batches, total
+    RETURN batches, total
+    """
+
+    def get_query(self) -> str:
+        if self.query is None:
+            self._build_query()
+        return self.query
 
 
 @Neo4jQueryRegistry.register_query()
