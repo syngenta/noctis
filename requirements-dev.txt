@@ -4,8 +4,7 @@ pytest
 pytest-cov
 pytest-mock
 sphinx
-black
-flake8
-isort
+autodoc_pydantic
+sphinxcontrib.mermaid
 pre-commit
 graphviz

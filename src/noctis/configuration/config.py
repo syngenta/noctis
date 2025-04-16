@@ -4,42 +4,50 @@ For the User
 -------------
 
 This software  needs some configuration setting to function, including some secrets,
-like authentication details. \n
+like authentication details.
+
 We use dynaconf (www.dynaconf.com/) to manage settings and secrets.
 This tool natively supports a layered approach that
-sources settings from files in multiple formats and from environment variables. \n
+sources settings from files in multiple formats and from environment variables.
 
 The package contains some default values for non-secret parameters,
-encoded into the package source code. \n
+encoded into the package source code.
+
 The user can partially or totally override these values by providing a
-custom settings.yaml file. \n
-By default the program looks into the user home directory (<home_dir>) for a folder
+custom settings.yaml file.
+
+By default, the program looks into the user home directory (<home_dir>) for a folder
 that has the name of the package (noctis) and for a
-settings.yaml and .secrets.yaml files inside it. \n
-\n
+settings.yaml and .secrets.yaml files inside it.
+
 If the directory or the necessary files are missing the
 program stops with an error message:
-it is necessary to create them! \n
-Tha package provides a convenient cli to create them, using defaults
+it is necessary to create them!
+
+The package provides a convenient cli to create them, using defaults
 
 .. code-block:: shell
 
     noctis_configure
 
 By executing this command in the environment where the package is installed, the command
-will generate the missing files. \n
-The settings.yaml file will be populated using the encoded default values \n
+will generate the missing files.
+
+The settings.yaml file will be populated using the encoded default values
+
 If required, .secrets.yaml is also created containing only keys, leaving it to the user
-to complete it. \n
-\n
+to complete it.
+
 The program uses the values provided in the settings.yaml and .secrets.yaml files,
-overriding the encoded defaults. \n
+overriding the encoded defaults.
+
 It is possible to override the instruction provided settings.yaml by
-pointing to another settings file:\n
+pointing to another settings file:
 the values provided in this file override the values in the
-<home_dir>/noctis/.settings.yaml file. \n
+<home_dir>/noctis/.settings.yaml file.
+
 This is done by setting the environment variable INCLUDES_FOR_DYNACONF
- and pointing it to a user-specific setting file
+and pointing it to a user-specific setting file
 (https://www.dynaconf.com/configuration/)
 
 .. code-block:: shell
@@ -47,7 +55,7 @@ This is done by setting the environment variable INCLUDES_FOR_DYNACONF
     export INCLUDES_FOR_DYNACONF='/path/to/user_specific_settings.yaml'
 
 NOTE for Windows users:
-it is possible to set environment variables for each user or globally using the OS
+It is possible to set environment variables for each user or globally using the OS
 
 1. Open the Start menu and type "edit ENV" into the search bar
 2. Tap "Edit Environment variables for your account"
@@ -55,31 +63,29 @@ it is possible to set environment variables for each user or globally using the 
 4. Click "Edit"
 5. In the window that opens, hit "Variable value" and input the path you would like to add
 
-
-the commands to set and to visualize environment variables are, respectively:
-
+The commands to set and to visualize environment variables are, respectively:
 
 .. code-block:: shell
 
     set ENV_KEY='env_value'
     echo %ENV_KEY%
 
-..
-
 For the Developer
 -----------------
+
 The subpackage "configuration" contains a config.py module: do not change this file
-because this contains the main module interface to the package. \n
-Te developer can/should modify the module defaults.py. This module exposes two
-dictionaries to the config.py module:  \n
+because this contains the main module interface to the package.
+
+The developer can/should modify the module defaults.py. This module exposes two
+dictionaries to the config.py module:
+
 1. settings = {"key1": "value1", "key2": "value2"}
 2. secrets = { "key1": "<put the correct value here and keep it secret>",
-"key2": "<put the correct value here and keep it secret>"}
+   "key2": "<put the correct value here and keep it secret>"}
 
 While we populate the settings keys, we leave placeholders for those in secrets.
 This reflects on the files create by the configuration command:
 we do not encode the secrets value in the code!
-
 """
 from pathlib import Path
 
