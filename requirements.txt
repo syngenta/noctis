@@ -11,4 +11,4 @@ dask[dataframe]
 dask[distributed]
 
 rdkit
-linchemin @ git+https://github.com/syngenta/linchemin-private.git@dev
+linchemin
