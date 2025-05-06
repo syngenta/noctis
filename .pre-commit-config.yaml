@@ -1,0 +1,32 @@
+repos:
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-yaml
+      - id: check-case-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-toml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+        #exclude: '^docs/source/reference/generated/.*\.rst'
+      - id: fix-byte-order-marker
+        #exclude: '^docs/source/reference/generated/.*\.rst'
+      - id: no-commit-to-branch
+        args: [--branch, main]
+      - id: trailing-whitespace
+        #exclude: '^docs/source/reference/generated/.*\.rst'
+  - repo: https://github.com/ambv/black
+    rev: 23.9.1
+    hooks:
+      - id: black
+        files: '.*\.pyi?$'
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.11.1
+    hooks:
+      - id: pyupgrade
+        args: [--py38-plus, --keep-runtime-typing]
+        files: '.*\.pyi?$'

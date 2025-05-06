@@ -26,6 +26,7 @@ dist/
 
 # Sphinx documentation
 /docs/build/
+/docs/source/generated/*rst
 /docs/source/reference/generated/*rst
 
 # managing secrets

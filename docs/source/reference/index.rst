@@ -2,8 +2,3 @@ References
 ==========
 
 .. currentmodule:: 'noctis'
-
-
-
-
-

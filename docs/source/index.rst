@@ -12,7 +12,7 @@ Welcome to noctis's documentation!
 
     :Release: |version|
 
-Text here
+NOCTIS is a Python toolkit for constructing and analyzing reaction networks in a graph-based environment. It currently supports Neo4j for robust graph data operations but is readily extensible to other solutions. Through flexible query interface, users can uncover synthetic routes, explore connectivity, and manage large-scale reaction data.
 
 
 Contents
@@ -21,7 +21,11 @@ Contents
 .. toctree::
    :maxdepth: 1
 
-   Installation
+   pages/installation
+   pages/configuration
+   pages/classdiagram
+   pages/code
+   pages/workflows
    reference/index
 
 Indices and tables
@@ -29,5 +33,3 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`search`
-
-

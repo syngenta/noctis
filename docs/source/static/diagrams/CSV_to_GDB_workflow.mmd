@@ -1,0 +1,30 @@
+---
+config:
+  layout: fixed
+---
+flowchart TD
+ subgraph data_transformation["data_transformation"]
+        B["Preprocessor"]
+        BB["CSVPreprocessor"]
+        C["GraphExpander"]
+  end
+ subgraph repository["repository"]
+        F["Neo4jRepository"]
+        G["Neo4jQuery"]
+        H["neo4j_functions"]
+  end
+ subgraph data_architecture["data_architecture"]
+        L["GraphSchema"]
+  end
+    A["Start: CSV File"] --> B
+    B --> BB & E["Neo4j-ready CSV"]
+    BB --> C & B
+    C --> BB
+    E --> F
+    F --> G & J["Submit to Graph DB"]
+    G --> F & H
+    H --> G
+    J --> K["End: Data in Graph DB"]
+    AA["Start: Input for GraphSchema"] --> L
+    L --> B
+    M["User Input: CSV Path for Neo4jRepository"] --> E

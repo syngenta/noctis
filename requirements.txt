@@ -1,1 +1,14 @@
 # Requirement strings following PEP 508 (https://peps.python.org/pep-0508/)
+dynaconf
+pyyaml
+neo4j>=5.0.0
+networkx
+pandas>=2.0.0
+pydantic>=2.0.0
+tqdm
+dask
+dask[dataframe]
+dask[distributed]
+
+rdkit
+linchemin>=3.0.0
