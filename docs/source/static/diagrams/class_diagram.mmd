@@ -1,0 +1,92 @@
+---
+config:
+  theme: mc
+  look: classic
+  layout: fixed
+---
+flowchart TD
+ subgraph DA["datacontainer"]
+        DC["DataContainer"]
+  end
+ subgraph GSF["graph_schema"]
+        GSC["GraphSchema"]
+  end
+ subgraph DM["datamodel"]
+        NN["Node"]
+        RR["Relationship"]
+        GR["GraphRecord"]
+  end
+ subgraph data_architecture["data_architecture"]
+        DA
+        GSF
+        DM
+  end
+ subgraph core_graph_builder["core_graph_builder"]
+        CGB["CoreGraphBuilder"]
+  end
+ subgraph data_preprocessing["data_preprocessing"]
+        PPC["PreprocessorConfig"]
+        PP["Preprocessor"]
+        POP["PythonObject Preprocessors"]
+        COP["CSVPreprocessor"]
+  end
+ subgraph graph_expander["graph_expander"]
+        GE["GraphExpander"]
+  end
+ subgraph preprocessing["preprocessing"]
+        core_graph_builder
+        data_preprocessing
+        graph_expander
+  end
+ subgraph chemdata_generators["chemdata_generators"]
+        PO["ChemDataGeneratorFactory"]
+        CPO["Concrete ChemDataGenerators"]
+  end
+ subgraph postprocessing["postprocessing"]
+        chemdata_generators
+  end
+ subgraph neo4j["neo4j"]
+        FO["Neo4jFormatter"]
+  end
+ subgraph data_transformation["data_transformation"]
+        preprocessing
+        postprocessing
+        neo4j
+  end
+ subgraph neo4j_queries["neo4j_queries"]
+        Q["Neo4jQuery"]
+  end
+ subgraph neo4j_repository["neo4j_repository"]
+        NR["Neo4jRepository"]
+  end
+ subgraph neo4j_another["neo4j"]
+        neo4j_queries
+        NF["neo4j_functions"]
+        neo4j_repository
+  end
+ subgraph repository["repository"]
+        neo4j_another
+  end
+ subgraph Noctis["Noctis"]
+        data_architecture
+        data_transformation
+        repository
+  end
+     DC:::largeFont
+     GSC:::largeFont
+     NN:::largeFont
+     RR:::largeFont
+     GR:::largeFont
+     CGB:::largeFont
+     PPC:::largeFont
+     PP:::largeFont
+     POP:::largeFont
+     COP:::largeFont
+     GE:::largeFont
+     PO:::largeFont
+     CPO:::largeFont
+     FO:::largeFont
+     Q:::largeFont
+     NR:::largeFont
+     NF:::largeFont
+    classDef largeFont fill:#FFF, stroke:#333, font-size:20px

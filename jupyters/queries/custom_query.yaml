@@ -1,0 +1,56 @@
+- version: 1.0
+- date: 2025-03-27
+
+- query_name: count_nodes
+  query_type: retrieve_stats
+  query: |
+    MATCH (n)
+    RETURN count(n)
+
+- query_name: get_node_by_smiles
+  query_type: retrieve_graph
+  query_args_required:
+    - smiles
+  query: |
+    MATCH (n {smiles:$smiles})
+    RETURN n
+
+- query_name: set_gid
+  query_type: modify_graph
+  query: |
+    CALL apoc.periodic.iterate(
+      "MATCH (n) RETURN n",
+      "SET n.gid = n.uid",
+      {batchSize:10000, parallel:false}
+    )
+    YIELD batches, total, timeTaken, committedOperations
+    RETURN batches, total, timeTaken, committedOperations
+
+
+- query_name: get_tree_neo4j
+  query_type: retrieve_graph
+  query_args_required:
+    - root_node_uid
+  query_args_optional:
+    - max_level
+  query: |
+      MATCH (start {uid:$root_node_uid})
+      CALL apoc.path.subgraphAll(start, {
+        relationshipFilter: '<PRODUCT,<REACTANT',
+        minLevel: 0,
+        maxLevel: $max_level
+      })
+      YIELD nodes, relationships
+      RETURN nodes, relationships
+
+
+- query_name: delete_all_nodes
+  query_type: modify_graph
+  query: |
+    CALL apoc.periodic.iterate(
+        "MATCH (n) RETURN n",
+        "DETACH DELETE n",
+        {batchSize:1000}
+    )
+    YIELD batches, total
+    RETURN batches, total

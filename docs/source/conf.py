@@ -6,6 +6,11 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import noctis
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath("."))
+
 
 project = "noctis"
 copyright = "2023 Syngenta Group Co. Ltd."
@@ -15,7 +20,14 @@ show_authors = True
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 modindex_common_prefix = ["noctis."]
 
-extensions = ["sphinx.ext.autodoc", "sphinx.ext.autosummary", "sphinx.ext.viewcode"]
+extensions = [
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.viewcode",
+    "sphinxcontrib.mermaid",
+    "sphinxcontrib.autodoc_pydantic",
+    "sphinx.ext.autosectionlabel",
+]
 
 templates_path = ["templates"]
 exclude_patterns = ["build", "Thumbs.db", ".DS_Store"]
@@ -32,8 +44,7 @@ release = version.replace("_", "")
 
 html_theme = "bizstyle"
 html_static_path = ["static"]
-# html_logo = "static/logo.png"
-
+html_logo = "static/noctis.png"
 
 html_sidebars = {
     "**": [
@@ -43,3 +54,8 @@ html_sidebars = {
         "authors.html",
     ]
 }
+
+# Add this to control the depth of the TOC
+toc_object_entries_show_parents = "hide"
+
+autodoc_pydantic_model_show_json = True

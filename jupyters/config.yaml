@@ -1,0 +1,14 @@
+output_folder: "output"
+tmp_folder: "tmp"
+inp_chem_format: "smiles"
+out_chem_format: "smiles"
+validation: True
+parallel: False
+prefix: 'N'
+blocksize: 60000  # Kb; used by dask in run_parallel
+chunksize: 1000  # number of lines; used in run_serial
+delimiter: ","
+lineterminator: null
+delete_tmp: True
+quotechar: '"'
+nrows: 10000

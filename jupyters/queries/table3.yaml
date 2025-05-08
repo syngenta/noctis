@@ -1,0 +1,61 @@
+- date: 2025-04-04
+
+- query_name: count_root_nodes
+  query_type: retrieve_stats
+  query: |
+    MATCH (n:Molecule)
+    WHERE NOT (n)-->()
+      AND EXISTS { MATCH (n)<--() }
+    RETURN COUNT(n) AS rootNodeCount
+
+- query_name: count_leaf_nodes
+  query_type: retrieve_stats
+  query: |
+    MATCH (n:Molecule)
+    WHERE NOT (n)<--()
+      AND EXISTS { MATCH (n)-->() }
+    RETURN COUNT(n) AS leafNodeCount
+
+- query_name: average_reactant_count
+  query_type: retrieve_stats
+  query: |
+    MATCH (ce:ChemicalEquation)-[r:REACTANT]-()
+    WITH ce, count(r) AS reactantCount
+    RETURN
+      avg(reactantCount) AS averageReactantCount,
+      count(ce) AS totalChemicalEquations,
+      sum(reactantCount) AS totalReactantRelationships
+
+
+- query_name: average_product_to_molecule_ratio
+  query_type: retrieve_stats
+  query: |
+    MATCH (m:Molecule)-[:REACTANT]->(ce:ChemicalEquation)-[:PRODUCT]->(p:Molecule)
+    WITH DISTINCT m, COUNT(DISTINCT p) AS productCount
+    WITH
+      AVG(productCount) AS averageProductToMoleculeRatio,
+      SUM(productCount) AS totalProducts,
+      COUNT(m) AS totalReactantMolecules
+    RETURN
+      averageProductToMoleculeRatio,
+      totalProducts,
+      totalReactantMolecules
+
+- query_name: molecules_with_multiple_products
+  query_type: retrieve_stats
+  query: |
+    MATCH (m:Molecule)<-[p:PRODUCT]-()
+    WITH m, COUNT(p) AS productCount
+    WHERE productCount > 1
+    RETURN COUNT(m) AS moleculesWithMultipleProducts
+
+- query_name: delete_all_nodes
+  query_type: modify_graph
+  query: |
+    CALL apoc.periodic.iterate(
+        "MATCH (n) RETURN n",
+        "DETACH DELETE n",
+        {batchSize:1000}
+    )
+    YIELD batches, total
+    RETURN batches, total
