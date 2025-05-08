@@ -8,3 +8,4 @@ autodoc_pydantic
 sphinxcontrib.mermaid
 pre-commit
 graphviz
+pydantic>=2.0.0
