@@ -11,6 +11,8 @@ build:
   tools:
     python: "3.10"
   jobs:
+    pre_build:
+    - pip install -e .[dev]
     post_install:
     - noctis_configure
 
