@@ -6,7 +6,7 @@ Data Transformation
 Overview
 --------
 
-The Data Transformation module is a key component of the Noctis project, focusing on various aspects of data manipulation, formatting, and processing. This module provides tools for styling data, formatting Neo4j results, and both preprocessing and postprocessing of chemical data.
+The Data Transformation module is a key component of the NOCTIS, focusing on various aspects of data manipulation, formatting, and processing. This module provides tools for styling data, formatting Neo4j results, and both preprocessing and postprocessing of chemical data.
 
 Data Styles
 -----------
