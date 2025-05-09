@@ -5,11 +5,6 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
-import noctis
-import os
-import sys
-
-#sys.path.insert(0, os.path.abspath("."))
 
 
 project = "noctis"
@@ -35,7 +30,7 @@ exclude_patterns = ["build", "Thumbs.db", ".DS_Store"]
 autosummary_generate = True
 
 
-version = noctis.__version__
+version = "1.0.3"
 # The full version, including dev info
 release = version.replace("_", "")
 
