@@ -42,6 +42,7 @@ push            = true
 
 [tool.bumpver.file_patterns]
 "pyproject.toml" = ['current_version = "{version}"', 'version = "{version}"']
+"docs/source/conf.py" = ['version = "{version}"']
 
 [project.scripts]
 noctis_configure = "noctis.configuration.config:configure"
