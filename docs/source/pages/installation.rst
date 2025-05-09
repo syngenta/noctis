@@ -1,7 +1,7 @@
 Installation
 ============
 
-pumas requires python 3.9 or higher, as well as some common and reliable third party packages
+NOCTIS requires python 3.9 or higher, as well as some common and reliable third party packages
 
 Usage installation
 --------------------
