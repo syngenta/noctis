@@ -1,0 +1,37 @@
+---
+config:
+  layout: fixed
+---
+flowchart TD
+ subgraph repository["repository"]
+        B["Neo4jRepository"]
+        D["Neo4jQuery"]
+  end
+ subgraph datacontainer["datacontainer"]
+        J["DataContainer"]
+  end
+ subgraph data_architecture["data_architecture"]
+        datacontainer
+  end
+ subgraph postprocessing["postprocessing"]
+        K["ChemDataGeneratorFactory"]
+        L["Concrete ChemDataGenerator"]
+  end
+ subgraph neo4j["neo4j"]
+        H["Neo4jFormatter"]
+  end
+ subgraph data_transformation["data_transformation"]
+        postprocessing
+        neo4j
+  end
+    A["Start: User Request"] --> B
+    B --> D
+    D --> F["Execute Cypher Query in Neo4j"]
+    F --> G["Raw Neo4j Result"]
+    G --> H
+    H --> J
+    JJ["User Input: Selected Transformation"] --> J
+-->K
+    K --> L
+    L --> M["Python Object"]
+    M --> Z["End: Result Returned to User"]

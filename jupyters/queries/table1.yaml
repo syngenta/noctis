@@ -1,0 +1,25 @@
+- query_name: products_per_distinct_molecule
+  query_type: retrieve_stats
+  query_args_required:
+  - smiles
+  query: |
+    MATCH (start {smiles: $smiles})
+    CALL apoc.path.subgraphAll(start, {
+      relationshipFilter: '<PRODUCT|<REACTANT',
+      minLevel: 0,
+      maxLevel: 8
+    }) YIELD nodes
+
+    MATCH (c:ChemicalEquation)-[r:PRODUCT]->(p)
+    WHERE c IN nodes AND p IN nodes
+    WITH p, count(r) AS productCount
+    RETURN productCount, count(DISTINCT p.smiles) as distinct_smiles
+    order by productCount desc
+
+- query_name: get_node_by_smiles
+  query_type: retrieve_graph
+  query_args_required:
+    - smiles
+  query: |
+    MATCH (n {smiles:$smiles})
+    RETURN n
