@@ -32,7 +32,8 @@ class Relationship(BaseModel):
     """Represents a relationship between two nodes in a graph."""
 
     model_config = ConfigDict(populate_by_name=True, frozen=True)
-    relationship_type: Annotated[str, StringConstraints(pattern=r"^[A-Z0-9_-]+$")]
+    relationship_type: Annotated[str, StringConstraints(pattern=r"^[A-Z\d_-]+$")]
+
     start_node: Node
     end_node: Node
     properties: Annotated[Optional[dict], Field(default={})]

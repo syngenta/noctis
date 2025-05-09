@@ -115,7 +115,6 @@ class Neo4jQueryRegistry:
         To register a new query class:
         @Neo4jQueryRegistry.register_query()
         class MyNewQuery(AbstractQuery):
-            ...
 
         To retrieve a query class:
         query_class = Neo4jQueryRegistry.get_query_object("my_query_name")
