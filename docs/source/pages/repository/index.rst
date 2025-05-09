@@ -3,8 +3,6 @@ Repository Module
 
 .. currentmodule:: noctis
 
-Overview
---------
 
 The Repository Module is a crucial component of the Noctis project, primarily focused on interactions with Neo4j databases. This module provides a comprehensive set of tools and functionalities for managing, querying, and manipulating graph data within a Neo4j environment.
 

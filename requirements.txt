@@ -11,4 +11,4 @@ dask[dataframe]
 dask[distributed]
 
 rdkit
-linchemin
+linchemin>=3.0.0

@@ -30,7 +30,7 @@
    :align: center
    :width: 250px
 
-What is Noctis?
+What is **NOCTIS**?
 ---------------
 
 **NOCTIS** is a Python package for modeling and analyzing chemical reaction data as graph structures.
@@ -78,27 +78,45 @@ Create a dedicated Python environment for this package with your favorite enviro
 Configuration
 -------------
 
-This package requires some configuration parameters to work,
-including some secrets to store access credentials to database and services.
+Both **NOCTIS** and its companion package **Linchemin** need a small on-disk configuration before you can use them.
 
 After installation, and before the first usage, run the following command:
 
 .. code-block:: shell
 
-    noctis_configure
+    noctis_configure && linchemin_configure
 
-This command creates a `<home>/noctis` directory and places into it:
+What each command does
+----------------------
 
-1. `settings.yaml` – populated with default settings. You can review and modify them.
-2. `.secrets.yaml` – contains placeholders for secrets. Fill them with your actual values.
-3. `schema.yaml` – a description of the graph schema used in the database.
+| ``noctis_configure``
+| Creates the directory ``~/noctis/`` and writes three files
 
-🔧 For more details, refer to the **Configuration** section of the documentation.
+    |  ``settings.yaml`` – default runtime settings (edit as needed)
+    |  ``.secrets.yaml`` – placeholders for credentials (replace with the real
+      values)
+    |  ``schema.yaml`` – description of the graph schema used by the database
+
+| ``linchemin_configure``
+| Creates the directory ``~/linchemin/`` and writes two files
+
+    |  ``settings.toml`` – default settings you may tweak
+    |  ``.secrets.toml`` – placeholders for the required secrets
+
+For more details:
+
+| 🔧 **NOCTIS** – see the *Configuration* chapter of this `documentation <https://noctis.readthedocs.io/>`_.
+| 🔧 **Linchemin** – see the `Linchemin repo <https://github.com/syngenta/linchemin>`_ for full details.
+|
+|
+| ⚠️ **ALERT** ⚠️:
+| If you skip this step you’ll run straight into mysterious import errors (e.g. *“Settings object has no attribute ‘CONSTRUCTORS’”*). The fix is simply to run the two commands above once.
+
 
 Development Installation
 ---------------------------
 
-If you're working on the development of Noctis and want to run directly from source:
+If you're working on the development of **NOCTIS** and want to run directly from source:
 
 .. code-block:: shell
 
